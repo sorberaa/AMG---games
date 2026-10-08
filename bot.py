@@ -52,12 +52,15 @@ async def main():
         BotCommand(command="race", description="🏁 Гонки"),
         BotCommand(command="duel", description="⚔️ Дуэль [ставка/монеты]"),
         BotCommand(command="boss", description="👾 Рейд на босса в чате"),
+        BotCommand(command="tournament", description="🏆 Гран-при турнир чата"),
+        BotCommand(command="chase", description="🚓 Погоня от полиции"),
         BotCommand(command="garage", description="🚗 Гараж"),
         BotCommand(command="profile", description="👤 Профиль"),
         BotCommand(command="daily", description="🎁 Бонус дня"),
         BotCommand(command="top", description="🏆 Рейтинг"),
         BotCommand(command="help", description="❓ Помощь"),
     ])
+
 
 
     runner = await start_web()
