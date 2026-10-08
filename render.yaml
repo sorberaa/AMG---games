@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: amg-racing-bot
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_IDS
+        sync: false
+      - key: PORT
+        value: 10000
+      - key: DATABASE_PATH
+        value: /app/data/amg_game.db
