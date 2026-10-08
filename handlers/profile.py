@@ -23,11 +23,14 @@ async def profile_text(uid: int) -> str:
     need = xp_for_level(p["level"])
     bar_len = int(p["xp"] / need * 10) if need else 0
     bar = "▰" * bar_len + "▱" * (10 - bar_len)
+    ins_t = "🛡 Страховка: <b>Активна</b>" if p.get("has_insurance") else "🛡 Страховка: <i>Нет</i>"
+    wrap_t = " · ✨ <i>Золотой винил</i>" if p.get("gold_wrap") else ""
     return (
         f"👤 <b>{p['first_name']}</b>\n\n"
         f"📊 Уровень <b>{p['level']}</b>\n{bar} {p['xp']}/{need} XP\n\n"
         f"💰 Деньги: <b>${fmt(p['money'])}</b>\n"
         f"🪙 Монеты: <b>{fmt(p['coins'])}</b>\n"
+        f"{ins_t}{wrap_t}\n"
         f"⚡ Энергия: {p['energy']}/{p['max_energy']}\n"
         f"⭐ Репутация: {p['reputation']}\n\n"
         f"🏁 Гонок: {p['races_total']} · 🏆 {p['wins']} · 💀 {p['losses']}\n"
@@ -35,6 +38,7 @@ async def profile_text(uid: int) -> str:
         f"🚗 Машин: {len(cars)} · Основная: {CAR_CATALOG[pc['car_key']]['name'] if pc else '—'}\n"
         f"🔥 Стрик: {p['daily_streak']} дн. · 🏅 Достижений: {len(ach)}/{len(ACHIEVEMENTS_DEF)}"
     )
+
 
 
 @router.message(Command("profile"))

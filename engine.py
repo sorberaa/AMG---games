@@ -57,7 +57,48 @@ def _norm(s: dict) -> dict:
     }
 
 
-def simulate_race(s1: dict, s2: dict, name1: str, name2: str) -> dict:
+def simulate_race(s1: dict, s2: dict, name1: str, name2: str, p1_insured: bool = False, p2_insured: bool = False) -> dict:
+    # 1% шанс аварии для каждого участника
+    p1_crash = random.random() < 0.01
+    p2_crash = random.random() < 0.01
+
+    if p1_crash or p2_crash:
+        crashed_1 = p1_crash
+        crashed_2 = p2_crash
+        insurance_saved_1 = False
+        insurance_saved_2 = False
+
+        if crashed_1 and p1_insured:
+            insurance_saved_1 = True
+            crashed_1 = False
+        if crashed_2 and p2_insured:
+            insurance_saved_2 = True
+            crashed_2 = False
+
+        if crashed_1 and not crashed_2:
+            return {
+                "winner": 2,
+                "crashed": 1,
+                "insurance_saved": 0,
+                "narrative": f"💥 <b>АВАРИЯ НА СКОРОСТИ 280 КМ/Ч!</b>\nМашину <b>{name1}</b> развернуло в отбойник! Гонка окончена.",
+                "margin": "из-за вылета соперника! 🚨"
+            }
+        elif crashed_2 and not crashed_1:
+            return {
+                "winner": 1,
+                "crashed": 2,
+                "insurance_saved": 0,
+                "narrative": f"💥 <b>АВАРИЯ НА СКОРОСТИ 280 КМ/Ч!</b>\nМашину <b>{name2}</b> занесло в ограждение! Гонка окончена.",
+                "margin": "из-за вылета соперника! 🚨"
+            }
+        elif insurance_saved_1 or insurance_saved_2:
+            saved_name = name1 if insurance_saved_1 else name2
+            saved_note = f"🛡 <i>Страховка AMG спасла {saved_name} от крушения! Системы удержали курс.</i>\n\n"
+        else:
+            saved_note = ""
+    else:
+        saved_note = ""
+
     n1, n2 = _norm(s1), _norm(s2)
     total1 = total2 = 0.0
     lines = []
@@ -79,7 +120,14 @@ def simulate_race(s1: dict, s2: dict, name1: str, name2: str) -> dict:
     winner = 1 if total1 >= total2 else 2
     gap = abs(total1 - total2) / max(total1, total2)
     margin = "с огромным отрывом! 🔥" if gap > 0.12 else "в упорной борьбе! 💪" if gap > 0.04 else "на волоске! 😱"
-    return {"winner": winner, "narrative": "\n\n".join(lines), "margin": margin}
+    return {
+        "winner": winner,
+        "crashed": 0,
+        "insurance_saved": 1 if (p1_crash and p1_insured) else (2 if (p2_crash and p2_insured) else 0),
+        "narrative": saved_note + "\n\n".join(lines),
+        "margin": margin
+    }
+
 
 
 def calc_rewards(level: int, race_type: str, mult: float = 1.0, won: bool = True) -> dict:

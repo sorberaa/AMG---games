@@ -25,11 +25,12 @@ class Adm(StatesGroup):
 
 def main_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [Btn(text="📊 Статистика", callback_data="adm:stats"), Btn(text="👥 Игроки", callback_data="adm:players:0")],
-        [Btn(text="🔎 Найти игрока", callback_data="adm:find"), Btn(text="👑 Список админов", callback_data="adm:admins")],
-        [Btn(text="📢 Рассылка", callback_data="adm:broadcast")],
+        [Btn(text="📊 Статистика", callback_data="adm:stats"), Btn(text="🪙 Приход/Уход монет", callback_data="adm:coin_flow")],
+        [Btn(text="👥 Игроки", callback_data="adm:players:0"), Btn(text="🔎 Найти игрока", callback_data="adm:find")],
+        [Btn(text="👑 Список админов", callback_data="adm:admins"), Btn(text="📢 Рассылка", callback_data="adm:broadcast")],
         [Btn(text="✖️ Закрыть", callback_data="adm:close")],
     ])
+
 
 
 def back_kb(cb: str = "adm:main") -> InlineKeyboardMarkup:
@@ -87,6 +88,8 @@ async def adm_router(cb: CallbackQuery, state: FSMContext):
         await cb.message.delete()
     elif action == "stats":
         await show_stats(cb)
+    elif action == "coin_flow":
+        await show_coin_flow(cb)
     elif action == "players":
         await show_players(cb, int(parts[2]))
     elif action == "p":
@@ -131,6 +134,30 @@ async def show_stats(cb: CallbackQuery):
     ), back_kb())
 
 
+async def show_coin_flow(cb: CallbackQuery):
+    flow = await db.get_coin_flow_stats()
+    txs = await db.get_recent_coin_txs(12)
+    tx_lines = []
+    for t in txs:
+        sign = "+" if t["amount"] > 0 else ""
+        name = t["first_name"] or str(t["user_id"])
+        time_part = t["created_at"][11:16] if len(t["created_at"]) >= 16 else ""
+        tx_lines.append(f"• <code>{time_part}</code> {name}: <b>{sign}{t['amount']} 🪙</b> ({t['reason']})")
+    tx_text = "\n".join(tx_lines) if tx_lines else "<i>Транзакций пока нет</i>"
+
+    await safe_edit(cb, (
+        "🪙 <b>Движение монет (Приход / Уход)</b>\n\n"
+        f"📅 <b>Сегодня:</b>\n"
+        f"🟢 Приход: <b>+{fmt(flow['in_today'])} 🪙</b>\n"
+        f"🔴 Уход (траты): <b>-{fmt(flow['out_today'])} 🪙</b>\n"
+        f"⚖️ Баланс дня: <b>{fmt(flow['in_today'] - flow['out_today'])} 🪙</b>\n\n"
+        f"🌐 <b>За всё время:</b>\n"
+        f"🟢 Всего начислено: <b>+{fmt(flow['in_all'])} 🪙</b>\n"
+        f"🔴 Всего потрачено: <b>-{fmt(flow['out_all'])} 🪙</b>\n\n"
+        f"📜 <b>Последние операции:</b>\n{tx_text}"
+    ), back_kb())
+
+
 async def show_players(cb: CallbackQuery, page: int):
     players = await db.get_all_players()
     per = 8
@@ -158,9 +185,12 @@ def player_card(p: dict, cars: list) -> str:
                          if c["car_key"] in CAR_CATALOG)
     if len(cars) > 8:
         car_list += f" и ещё {len(cars) - 8}"
+    ins_status = "🛡 Страховка активна" if p.get("has_insurance") else "🛡 Без страховки"
+    wrap_status = "✨ Золотой винил" if p.get("gold_wrap") else ""
+    extra_status = f"\n{ins_status}" + (f" · {wrap_status}" if wrap_status else "")
     return (
         f"👤 <b>{p['first_name']}</b> (@{p['username'] or '—'})\n"
-        f"🆔 <code>{p['user_id']}</code>\n{role} · {status}\n\n"
+        f"🆔 <code>{p['user_id']}</code>\n{role} · {status}{extra_status}\n\n"
         f"📊 Уровень: {p['level']} ({p['xp']} XP)\n💰 Деньги: ${fmt(p['money'])}\n"
         f"🪙 Монеты: {fmt(p['coins'])} (сегодня: {p['coins_today'] if p['coins_date'] else 0})\n"
         f"⚡ Энергия: {p['energy']}/{p['max_energy']}\n⭐ Репутация: {p['reputation']}\n"
@@ -168,6 +198,7 @@ def player_card(p: dict, cars: list) -> str:
         f"🔥 Стрик: {p['daily_streak']}\n📅 С нами с: {p['created_at'][:10]}\n\n"
         f"🚗 Машины ({len(cars)}): {car_list or '—'}"
     )
+
 
 
 async def show_player(cb: CallbackQuery, uid: int):

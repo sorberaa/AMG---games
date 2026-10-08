@@ -34,6 +34,10 @@ CREATE TABLE IF NOT EXISTS players (
     last_energy_update TEXT DEFAULT NULL,
     is_admin INTEGER DEFAULT 0,
     is_banned INTEGER DEFAULT 0,
+    has_insurance INTEGER DEFAULT 0,
+    last_coin_duel TEXT DEFAULT NULL,
+    chat_nitro_until TEXT DEFAULT NULL,
+    gold_wrap INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS player_cars (
@@ -58,6 +62,7 @@ CREATE TABLE IF NOT EXISTS races (
     challenger_car_id INTEGER NOT NULL,
     opponent_car_id INTEGER DEFAULT NULL,
     bet INTEGER DEFAULT 0,
+    bet_type TEXT DEFAULT 'money',
     status TEXT DEFAULT 'pending',
     winner_id INTEGER DEFAULT NULL,
     chat_id INTEGER DEFAULT NULL,
@@ -69,6 +74,27 @@ CREATE TABLE IF NOT EXISTS achievements (
     unlocked_at TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (user_id, achievement_key)
 );
+CREATE TABLE IF NOT EXISTS coin_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    amount INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS bosses (
+    chat_id INTEGER PRIMARY KEY,
+    boss_name TEXT NOT NULL,
+    boss_car TEXT NOT NULL,
+    max_hp INTEGER NOT NULL,
+    current_hp INTEGER NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS boss_damage (
+    chat_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    damage INTEGER DEFAULT 0,
+    PRIMARY KEY (chat_id, user_id)
+);
 """
 
 UPGRADE_COLUMNS = {"engine", "turbo", "suspension", "tires", "nitro", "ecu", "body_kit"}
@@ -76,6 +102,7 @@ PLAYER_COLUMNS = {
     "username", "first_name", "level", "xp", "money", "coins", "coins_today", "coins_date",
     "reputation", "wins", "losses", "races_total", "pvp_wins", "daily_streak", "last_daily",
     "selected_car_id", "energy", "max_energy", "last_energy_update", "is_admin", "is_banned",
+    "has_insurance", "last_coin_duel", "chat_nitro_until", "gold_wrap"
 }
 
 
@@ -93,8 +120,24 @@ async def init_db() -> None:
         os.makedirs(d, exist_ok=True)
     async with _connect() as db:
         await db.executescript(SCHEMA)
+        # Миграция существующих таблиц
+        for col, typ in [
+            ("has_insurance", "INTEGER DEFAULT 0"),
+            ("last_coin_duel", "TEXT DEFAULT NULL"),
+            ("chat_nitro_until", "TEXT DEFAULT NULL"),
+            ("gold_wrap", "INTEGER DEFAULT 0"),
+        ]:
+            try:
+                await db.execute(f"ALTER TABLE players ADD COLUMN {col} {typ}")
+            except Exception:
+                pass
+        try:
+            await db.execute("ALTER TABLE races ADD COLUMN bet_type TEXT DEFAULT 'money'")
+        except Exception:
+            pass
         await db.execute("PRAGMA journal_mode=WAL")
         await db.commit()
+
 
 
 # ── Игроки ───────────────────────────────────────────────────
@@ -155,23 +198,39 @@ async def spend_money(user_id: int, amount: int) -> bool:
         return cur.rowcount > 0
 
 
-async def spend_coins(user_id: int, amount: int) -> bool:
+async def log_coin_tx(user_id: int, amount: int, reason: str):
+    try:
+        async with _connect() as db:
+            await db.execute(
+                "INSERT INTO coin_transactions (user_id, amount, reason) VALUES (?, ?, ?)",
+                (user_id, amount, reason)
+            )
+            await db.commit()
+    except Exception:
+        pass
+
+
+async def spend_coins(user_id: int, amount: int, reason: str = "Покупка") -> bool:
     async with _connect() as db:
         cur = await db.execute(
             "UPDATE players SET coins = coins - ? WHERE user_id = ? AND coins >= ?", (amount, user_id, amount)
         )
         await db.commit()
-        return cur.rowcount > 0
+        ok = cur.rowcount > 0
+    if ok:
+        await log_coin_tx(user_id, -amount, reason)
+    return ok
 
 
-async def add_coins_admin(user_id: int, amount: int) -> None:
+async def add_coins_admin(user_id: int, amount: int, reason: str = "Выдача админом") -> None:
     """Выдача монет админом — без лимитов."""
     async with _connect() as db:
         await db.execute("UPDATE players SET coins = MAX(0, coins + ?) WHERE user_id = ?", (amount, user_id))
         await db.commit()
+    await log_coin_tx(user_id, amount, reason)
 
 
-async def grant_coins(user_id: int, base_amount: int) -> int:
+async def grant_coins(user_id: int, base_amount: int, reason: str = "Награда за заезд") -> int:
     """
     Начисляет монеты с СКРЫТЫМ дневным лимитом (~500/день).
     До COINS_SOFT_CAP — полная награда, затем награда плавно падает,
@@ -205,7 +264,10 @@ async def grant_coins(user_id: int, base_amount: int) -> int:
             (amount, earned + amount, today, user_id),
         )
         await db.commit()
-        return amount
+    if amount > 0:
+        await log_coin_tx(user_id, amount, reason)
+    return amount
+
 
 
 async def add_xp(user_id: int, amount: int):
@@ -464,4 +526,92 @@ async def server_stats() -> dict:
             "avg_level": await one("SELECT AVG(level) FROM players"),
             "pvp": await one("SELECT COUNT(*) FROM races WHERE status = 'finished'"),
         }
+
+
+# ── Логи монет и Боссы ───────────────────────────────────────
+
+async def get_recent_coin_txs(limit: int = 15) -> list:
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT t.*, p.first_name, p.username FROM coin_transactions t "
+            "LEFT JOIN players p ON p.user_id = t.user_id ORDER BY t.id DESC LIMIT ?",
+            (limit,)
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_coin_flow_stats() -> dict:
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    async with _connect() as db:
+        async def val(q, *a):
+            c = await db.execute(q, a)
+            return (await c.fetchone())[0] or 0
+        in_today = await val("SELECT SUM(amount) FROM coin_transactions WHERE amount > 0 AND created_at >= ?", today)
+        out_today = await val("SELECT SUM(-amount) FROM coin_transactions WHERE amount < 0 AND created_at >= ?", today)
+        in_all = await val("SELECT SUM(amount) FROM coin_transactions WHERE amount > 0")
+        out_all = await val("SELECT SUM(-amount) FROM coin_transactions WHERE amount < 0")
+        return {
+            "in_today": in_today,
+            "out_today": out_today,
+            "in_all": in_all,
+            "out_all": out_all
+        }
+
+
+async def get_active_boss(chat_id: int) -> dict | None:
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM bosses WHERE chat_id = ? AND current_hp > 0", (chat_id,))
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
+async def create_boss(chat_id: int, boss_name: str, boss_car: str, max_hp: int) -> dict:
+    async with _connect() as db:
+        await db.execute("DELETE FROM bosses WHERE chat_id = ?", (chat_id,))
+        await db.execute("DELETE FROM boss_damage WHERE chat_id = ?", (chat_id,))
+        await db.execute(
+            "INSERT INTO bosses (chat_id, boss_name, boss_car, max_hp, current_hp) VALUES (?, ?, ?, ?, ?)",
+            (chat_id, boss_name, boss_car, max_hp, max_hp)
+        )
+        await db.commit()
+    return await get_active_boss(chat_id)
+
+
+async def damage_boss(chat_id: int, user_id: int, dmg: int) -> tuple[int, bool]:
+    """Наносит урон боссу. Возвращает (остаток_hp, повержен_ли)."""
+    async with _connect() as db:
+        cur = await db.execute("SELECT current_hp FROM bosses WHERE chat_id = ?", (chat_id,))
+        row = await cur.fetchone()
+        if not row:
+            return 0, False
+        cur_hp = max(0, row[0] - dmg)
+        await db.execute("UPDATE bosses SET current_hp = ? WHERE chat_id = ?", (cur_hp, chat_id))
+        await db.execute(
+            "INSERT INTO boss_damage (chat_id, user_id, damage) VALUES (?, ?, ?) "
+            "ON CONFLICT(chat_id, user_id) DO UPDATE SET damage = damage + ?",
+            (chat_id, user_id, dmg, dmg)
+        )
+        await db.commit()
+        return cur_hp, cur_hp == 0
+
+
+async def get_boss_damagers(chat_id: int) -> list:
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT d.damage, p.user_id, p.first_name FROM boss_damage d "
+            "JOIN players p ON p.user_id = d.user_id WHERE d.chat_id = ? ORDER BY d.damage DESC",
+            (chat_id,)
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def delete_boss(chat_id: int):
+    async with _connect() as db:
+        await db.execute("DELETE FROM bosses WHERE chat_id = ?", (chat_id,))
+        await db.execute("DELETE FROM boss_damage WHERE chat_id = ?", (chat_id,))
+        await db.commit()
+
 

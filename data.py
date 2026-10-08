@@ -116,6 +116,18 @@ COIN_SHOP = {
     "case_basic":    {"name": "📦 Обычный кейс", "price": 100, "desc": "Деньги, XP или машина класса D–B"},
     "case_elite":    {"name": "🎁 Элитный кейс", "price": 350, "desc": "Крупные призы и шанс на класс A–SS"},
     "xp_boost":      {"name": "📈 +500 XP", "price": 120, "desc": "Мгновенно +500 опыта"},
+    "insurance":     {"name": "🛡 Страховка AMG", "price": 150, "desc": "Защищает машину от аварии (спасет 1 раз)"},
+    "chat_nitro":    {"name": "⚡ Нитро для чата", "price": 80, "desc": "+10% скорости во всех командных гонках чата на 24ч"},
+    "gold_wrap":     {"name": "✨ Золотой винил", "price": 250, "desc": "+15% к авторитету и наградам в чате"},
+}
+
+# AMG GIFs (прямые проверенные ссылки)
+AMG_GIFS = {
+    "welcome": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbnE5OXQ4NG83eHBjOGp4eTBxeTJtcjY4d2N3eDV5OGx0dWVwMGhpMSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xUOrwihVn9p8HhU3iU/giphy.gif",
+    "win": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcWc1bWpmdTZhNHl0ZjlueHkyM2sydWF5cDFoNWpwbzJwdGFscWRvOSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKMt1VVNkHV2PaE/giphy.gif",
+    "crash": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbnN0YWFqNWJ4MW83eHNhaXN0bWgyOW05Mzd6bTZxb21xNWg4aG4yZCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/26n6WywStCAfdHUM8/giphy.gif",
+    "boss": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHIybTJqd3psb25nOXpsNmx6Y2psZjIwbWtwbnF3anoxMmE4eGNtNiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/l41JGlWa1xOjJSsV2/giphy.gif",
+    "race": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMWNvZGJocXh1ZDV4YmEydm5xM3NlNGF2cjB2cnBvaGlkbm5tNmMxZCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/MDJ9IbxxvDUQM/giphy.gif"
 }
 
 CASE_DROPS = {
@@ -157,7 +169,25 @@ def get_sell_price(car_data: dict, player_car: dict) -> int:
 
 
 def xp_for_level(level: int) -> int:
-    return level * 100 + (level ** 2) * 10
+    """
+    Прогрессивная RPG кривая:
+    Уровень 1 -> 2: 50 XP (всего 1-2 гонки)
+    Уровень 2 -> 3: 100 XP
+    Уровень 5: ~350 XP
+    Уровень 10: ~1200 XP
+    Уровень 20+: настоящий хардкор
+    """
+    if level <= 1:
+        return 50
+    elif level == 2:
+        return 100
+    elif level <= 5:
+        return int(80 * (level ** 1.35))
+    elif level <= 15:
+        return int(110 * (level ** 1.65))
+    else:
+        return int(140 * (level ** 1.85))
+
 
 
 def fmt(n) -> str:

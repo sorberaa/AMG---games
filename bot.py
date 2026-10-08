@@ -50,13 +50,15 @@ async def main():
     await bot.set_my_commands([
         BotCommand(command="menu", description="🏠 Главное меню"),
         BotCommand(command="race", description="🏁 Гонки"),
-        BotCommand(command="duel", description="⚔️ Вызов на дуэль [ставка]"),
+        BotCommand(command="duel", description="⚔️ Дуэль [ставка/монеты]"),
+        BotCommand(command="boss", description="👾 Рейд на босса в чате"),
         BotCommand(command="garage", description="🚗 Гараж"),
         BotCommand(command="profile", description="👤 Профиль"),
         BotCommand(command="daily", description="🎁 Бонус дня"),
         BotCommand(command="top", description="🏆 Рейтинг"),
         BotCommand(command="help", description="❓ Помощь"),
     ])
+
 
     runner = await start_web()
     try:

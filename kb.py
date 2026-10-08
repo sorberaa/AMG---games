@@ -109,9 +109,20 @@ def pvp_bet_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     for amount in (0, 1000, 5000, 10000, 50000, 100000):
         b.button(text="🤝 Без ставки" if amount == 0 else f"💵 ${fmt(amount)}", callback_data=f"race_pvp_bet:{amount}")
+    # Ставки на монеты 🪙 (с лимитом 1 час)
+    for c_amount in (10, 25, 50, 100):
+        b.button(text=f"🪙 {c_amount} монет", callback_data=f"race_coin_bet:{c_amount}")
     b.button(text="◀️ Назад", callback_data="race")
     b.adjust(2)
     return b.as_markup()
+
+
+def boss_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="💥 ТАРАНИТЬ / ОБГОН (-1 ⚡)", callback_data="boss:hit")],
+        [Btn(text="📊 Топ по урону", callback_data="boss:stats")],
+    ])
+
 
 
 def pvp_challenge_kb(race_id: int) -> InlineKeyboardMarkup:

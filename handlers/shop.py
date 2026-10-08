@@ -109,9 +109,11 @@ async def cb_coin_buy(cb: CallbackQuery):
         return await cb.answer("Энергия и так полная ⚡", show_alert=True)
     if key == "energy_plus" and p["max_energy"] >= MAX_ENERGY_CAP:
         return await cb.answer("Достигнут максимум энергии!", show_alert=True)
+    if key == "insurance" and p.get("has_insurance"):
+        return await cb.answer("У тебя уже действует страховка! 🛡", show_alert=True)
     if key.startswith("case") and await db.count_cars(uid) >= 30:
         return await cb.answer("Гараж переполнен! Продай машину перед открытием кейса.", show_alert=True)
-    if not await db.spend_coins(uid, item["price"]):
+    if not await db.spend_coins(uid, item["price"], reason=f"Покупка: {item['name']}"):
         return await cb.answer("Недостаточно монет 🪙", show_alert=True)
 
     await cb.answer()
@@ -122,9 +124,21 @@ async def cb_coin_buy(cb: CallbackQuery):
     elif key == "energy_plus":
         await db.update_player(uid, max_energy=p["max_energy"] + 1, energy=p["energy"] + 1)
         result = f"🔋 Максимум энергии теперь {p['max_energy'] + 1}!"
+    elif key == "insurance":
+        await db.update_player(uid, has_insurance=1)
+        result = "🛡 <b>Страховка AMG оформлена!</b>\nОна спасет твою машину при риске аварии."
+    elif key == "chat_nitro":
+        from datetime import datetime, timedelta
+        until = (datetime.utcnow() + timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+        await db.update_player(uid, chat_nitro_until=until)
+        result = "⚡ <b>Нитро для чата активировано на 24 часа!</b>\n+10% мощности в битвах с боссами и чат-заездах."
+    elif key == "gold_wrap":
+        await db.update_player(uid, gold_wrap=1)
+        result = "✨ <b>Золотой винил установлен!</b>\nМашина сияет, повышая твой авторитет и награды."
     elif key == "xp_boost":
         lvl, up = await db.add_xp(uid, 500)
         result = "📈 +500 XP!" + (f"\n🆙 <b>Новый уровень: {lvl}!</b>" if up else "")
+
     else:
         _, kind, value = roll_case(key)
         if kind == "money":
