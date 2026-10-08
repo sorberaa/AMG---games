@@ -130,18 +130,28 @@ def simulate_race(s1: dict, s2: dict, name1: str, name2: str, p1_insured: bool =
 
 
 
-def calc_rewards(level: int, race_type: str, mult: float = 1.0, won: bool = True) -> dict:
-    xp = (30 + level * 5) * mult
-    money = (500 + level * 150) * mult
-    rep = 5 + level
-    coins = random.randint(8, 15) * mult
+def calc_rewards(level: int, race_type: str, mult: float = 1.0, won: bool = True, car_rating: int = 150) -> dict:
+    """
+    Награды зависят от уровня, множителя противника И КЛАССА/РЕЙТИНГА ТАЧКИ (Аура тачки):
+    Базовая C180 (рейтинг ~140) дает обычный доход.
+    Топ спорткары и гиперкары (рейтинг 250 - 500+) дают в разы больше денег и монет!
+    """
+    aura_mult = max(0.8, car_rating / 160.0)
+
+    xp = (30 + level * 6) * mult
+    money = (600 + level * 160) * mult * aura_mult
+    rep = int((5 + level) * aura_mult)
+    coins = random.randint(8, 15) * mult * (aura_mult ** 0.8)
+
     if race_type == "pvp":
         xp *= 1.3
         money *= 1.5
         coins *= 1.3
+
     if not won:
-        return {"xp": int(xp * 0.3), "money": int(money * 0.15), "rep": 0, "coins": random.randint(1, 4)}
+        return {"xp": int(xp * 0.3), "money": int(money * 0.15), "rep": 0, "coins": random.randint(1, 3)}
     return {"xp": int(xp), "money": int(money), "rep": int(rep), "coins": int(coins)}
+
 
 
 def get_daily_reward(streak: int) -> dict:

@@ -39,19 +39,28 @@ async def cb_race(cb: CallbackQuery):
 @router.callback_query(F.data == "race_street")
 async def cb_street(cb: CallbackQuery):
     await cb.answer()
-    pc = await db.get_selected_car(cb.from_user.id)
+    uid = cb.from_user.id
+    p = await db.get_player(uid)
+    defeated = p.get("defeated_opponents", 0)
+    pc = await db.get_selected_car(uid)
     my = calc_stats(CAR_CATALOG[pc["car_key"]], car_upgrades(pc))["rating"] if pc else 0
     lines = []
-    for o in STREET_OPPONENTS:
+    for i, o in enumerate(STREET_OPPONENTS):
         r = calc_stats(CAR_CATALOG[o["car_key"]], o["upgrades"])["rating"]
-        lines.append(f"• {o['name']}: рейтинг {r}")
-    await safe_edit(cb, f"🏎 <b>Уличные гонки</b>\n\nТвой рейтинг: <b>{my}</b>\n\n" + "\n".join(lines) +
-                    "\n\n<i>Чем сильнее соперник — тем больше награда.</i>", street_opponents_kb())
+        status = "✅" if i < defeated else ("⚔️" if i == defeated else "🔒")
+        lines.append(f"{status} {o['name']}: рейтинг {r}")
+    await safe_edit(cb, f"🏎 <b>Уличные гонки (Лестница боссов)</b>\n\nТвой рейтинг: <b>{my}</b>\n\n" + "\n".join(lines) +
+                    "\n\n<i>Побеждай по порядку! Доход и монеты зависят от крутости твоей тачки.</i>", street_opponents_kb(defeated))
 
 
-async def apply_result(uid: int, car_id: int, won: bool, race_type: str, mult: float = 1.0) -> str:
+@router.callback_query(F.data.startswith("race_street_locked:"))
+async def cb_street_locked(cb: CallbackQuery):
+    await cb.answer("🔒 Сначала одолей предыдущего соперника!", show_alert=True)
+
+
+async def apply_result(uid: int, car_id: int, won: bool, race_type: str, mult: float = 1.0, car_rating: int = 150) -> str:
     p = await db.get_player(uid)
-    r = calc_rewards(p["level"], race_type, mult, won)
+    r = calc_rewards(p["level"], race_type, mult, won, car_rating=car_rating)
     await db.car_race_result(car_id, won)
     await db.increment(uid, races_total=1, wins=int(won), losses=int(not won), reputation=r["rep"],
                        pvp_wins=int(won and race_type == "pvp"))
@@ -72,10 +81,17 @@ async def apply_result(uid: int, car_id: int, won: bool, race_type: str, mult: f
 @router.callback_query(F.data.startswith("race_street:"))
 async def cb_street_race(cb: CallbackQuery):
     uid = cb.from_user.id
+    opp_idx = int(cb.data.split(":")[1])
     try:
-        opp = STREET_OPPONENTS[int(cb.data.split(":")[1])]
+        opp = STREET_OPPONENTS[opp_idx]
     except (ValueError, IndexError):
         return await cb.answer("Соперник не найден", show_alert=True)
+
+    p = await db.get_player(uid)
+    defeated = p.get("defeated_opponents", 0)
+    if opp_idx > defeated:
+        return await cb.answer("🔒 Сначала победи предыдущего соперника!", show_alert=True)
+
     pc = await db.get_selected_car(uid)
     if not pc:
         return await cb.answer("Сначала выбери машину в гараже!", show_alert=True)
@@ -87,13 +103,19 @@ async def cb_street_race(cb: CallbackQuery):
     my_car = CAR_CATALOG[pc["car_key"]]
     opp_car = CAR_CATALOG[opp["car_key"]]
     me = cb.from_user.first_name or "Ты"
-    p = await db.get_player(uid)
+
     p_ins = bool(p.get("has_insurance"))
-    res = simulate_race(calc_stats(my_car, car_upgrades(pc)), calc_stats(opp_car, opp["upgrades"]), me, opp["name"], p1_insured=p_ins)
+    my_stats = calc_stats(my_car, car_upgrades(pc))
+    res = simulate_race(my_stats, calc_stats(opp_car, opp["upgrades"]), me, opp["name"], p1_insured=p_ins)
     if res.get("insurance_saved") == 1:
         await db.update_player(uid, has_insurance=0)
     won = res["winner"] == 1
-    rewards = await apply_result(uid, pc["id"], won, "street", opp["bonus_mult"])
+
+    # Если победил текущего максимального босса — открываем следующего!
+    if won and opp_idx == defeated:
+        await db.update_player(uid, defeated_opponents=defeated + 1)
+
+    rewards = await apply_result(uid, pc["id"], won, "street", opp["bonus_mult"], car_rating=my_stats["rating"])
     extra = {"ghost_slayer"} if won and opp["difficulty"] == "extreme" else set()
     ach = await award_achievements(uid, extra)
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>" if won and not res.get("crashed") else (f"<a href='{data.AMG_GIFS['crash']}'>&#8205;</a>" if res.get("crashed") else "")
@@ -102,6 +124,7 @@ async def cb_street_race(cb: CallbackQuery):
     result = (f"🏆 <b>ПОБЕДА {res['margin']}</b>" if won else f"💀 <b>Поражение {res['margin']}</b>\n"
               "<i>Прокачай тачку в тюнинге и попробуй снова!</i>")
     await safe_edit(cb, f"{head}{res['narrative']}\n\n━━━━━━━━━━\n{result}\n{rewards}{ach}", race_result_kb())
+
 
 
 
@@ -317,11 +340,16 @@ async def cb_pvp_accept(cb: CallbackQuery):
             await db.add_money(winner_id, bet * 2)
         bank = f"\n💵 Банк: <b>${fmt(bet * 2)}</b> → {n1 if winner_id == p1['user_id'] else n2}" if bet else ""
 
+    s1 = calc_stats(c1, car_upgrades(pc1))
+    s2 = calc_stats(c2, car_upgrades(pc2))
     w_car = pc1["id"] if winner_id == p1["user_id"] else pc2["id"]
     l_car = pc2["id"] if w_car == pc1["id"] else pc1["id"]
-    w_rew = await apply_result(winner_id, w_car, True, "pvp")
-    l_rew = await apply_result(loser_id, l_car, False, "pvp")
+    w_rating = s1["rating"] if winner_id == p1["user_id"] else s2["rating"]
+    l_rating = s2["rating"] if winner_id == p1["user_id"] else s1["rating"]
+    w_rew = await apply_result(winner_id, w_car, True, "pvp", car_rating=w_rating)
+    l_rew = await apply_result(loser_id, l_car, False, "pvp", car_rating=l_rating)
     ach = await award_achievements(winner_id) + await award_achievements(loser_id)
+
     wn = n1 if winner_id == p1["user_id"] else n2
     ln = n2 if wn == n1 else n1
 

@@ -95,14 +95,18 @@ def race_menu_kb() -> InlineKeyboardMarkup:
     ])
 
 
-def street_opponents_kb() -> InlineKeyboardMarkup:
+def street_opponents_kb(unlocked_idx: int = 0) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     for i, o in enumerate(STREET_OPPONENTS):
         car = CAR_CATALOG[o["car_key"]]
-        b.button(text=f"{DIFFICULTY_EMOJI[o['difficulty']]} {o['name']} — {car['name']}", callback_data=f"race_street:{i}")
+        if i <= unlocked_idx:
+            b.button(text=f"{DIFFICULTY_EMOJI[o['difficulty']]} {o['name']} — {car['name']}", callback_data=f"race_street:{i}")
+        else:
+            b.button(text=f"🔒 {o['name']} (победи предыдущего)", callback_data=f"race_street_locked:{i}")
     b.button(text="◀️ Назад", callback_data="race")
     b.adjust(1)
     return b.as_markup()
+
 
 
 def pvp_bet_kb() -> InlineKeyboardMarkup:
