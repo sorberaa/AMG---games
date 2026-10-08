@@ -57,10 +57,10 @@ def _norm(s: dict) -> dict:
     }
 
 
-def simulate_race(s1: dict, s2: dict, name1: str, name2: str, p1_insured: bool = False, p2_insured: bool = False) -> dict:
-    # 1% шанс аварии для каждого участника
-    p1_crash = random.random() < 0.01
-    p2_crash = random.random() < 0.01
+def simulate_race(s1: dict, s2: dict, name1: str, name2: str, p1_insured: bool = False, p2_insured: bool = False, p1_immune: bool = False, p2_immune: bool = False) -> dict:
+    # 1% шанс аварии (самая слабая машина в тире никогда не разбивается)
+    p1_crash = (random.random() < 0.01) and (not p1_immune)
+    p2_crash = (random.random() < 0.01) and (not p2_immune)
 
     if p1_crash or p2_crash:
         crashed_1 = p1_crash
@@ -74,6 +74,7 @@ def simulate_race(s1: dict, s2: dict, name1: str, name2: str, p1_insured: bool =
         if crashed_2 and p2_insured:
             insurance_saved_2 = True
             crashed_2 = False
+
 
         if crashed_1 and not crashed_2:
             return {

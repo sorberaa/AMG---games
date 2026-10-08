@@ -92,6 +92,15 @@ async def cb_street_race(cb: CallbackQuery):
     if opp_idx > defeated:
         return await cb.answer("🔒 Сначала победи предыдущего соперника!", show_alert=True)
 
+    # Лимит 5 гонок в день против слабых соперников (easy)
+    from datetime import datetime
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    is_easy = opp["difficulty"] == "easy"
+    easy_count = p.get("easy_races_today", 0) if p.get("easy_races_date") == today else 0
+
+    if is_easy and easy_count >= 5:
+        return await cb.answer("⚠️ Лимит 5 заездов в день против слабых соперников исчерпан! Бросай вызов более сильным гонщикам — они без лимита!", show_alert=True)
+
     pc = await db.get_selected_car(uid)
     if not pc:
         return await cb.answer("Сначала выбери машину в гараже!", show_alert=True)
@@ -104,12 +113,24 @@ async def cb_street_race(cb: CallbackQuery):
     opp_car = CAR_CATALOG[opp["car_key"]]
     me = cb.from_user.first_name or "Ты"
 
+    # Иммунитет от аварии для самых слабых машин в каждом тире
+    my_immune = data.is_weakest_in_tier(pc["car_key"])
+    opp_immune = data.is_weakest_in_tier(opp["car_key"])
+
     p_ins = bool(p.get("has_insurance"))
     my_stats = calc_stats(my_car, car_upgrades(pc))
-    res = simulate_race(my_stats, calc_stats(opp_car, opp["upgrades"]), me, opp["name"], p1_insured=p_ins)
+    res = simulate_race(
+        my_stats, calc_stats(opp_car, opp["upgrades"]), me, opp["name"],
+        p1_insured=p_ins, p1_immune=my_immune, p2_immune=opp_immune
+    )
     if res.get("insurance_saved") == 1:
         await db.update_player(uid, has_insurance=0)
     won = res["winner"] == 1
+
+    # Учитываем легкий заезд в счетчике лимита
+    if is_easy:
+        new_cnt = 1 if p.get("easy_races_date") != today else easy_count + 1
+        await db.update_player(uid, easy_races_today=new_cnt, easy_races_date=today)
 
     # Если победил текущего максимального босса — открываем следующего!
     if won and opp_idx == defeated:
@@ -119,11 +140,13 @@ async def cb_street_race(cb: CallbackQuery):
     extra = {"ghost_slayer"} if won and opp["difficulty"] == "extreme" else set()
     ach = await award_achievements(uid, extra)
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>" if won and not res.get("crashed") else (f"<a href='{data.AMG_GIFS['crash']}'>&#8205;</a>" if res.get("crashed") else "")
+    limit_note = f"\n<i>Заездов со слабачками сегодня: {easy_count + 1}/5</i>" if is_easy else ""
     head = (f"{gif_tag}🏁 <b>{my_car['name']}</b> vs <b>{opp_car['name']}</b>\n"
             f"<i>{me} против «{opp['name']}»</i>\n\n")
     result = (f"🏆 <b>ПОБЕДА {res['margin']}</b>" if won else f"💀 <b>Поражение {res['margin']}</b>\n"
               "<i>Прокачай тачку в тюнинге и попробуй снова!</i>")
-    await safe_edit(cb, f"{head}{res['narrative']}\n\n━━━━━━━━━━\n{result}\n{rewards}{ach}", race_result_kb())
+    await safe_edit(cb, f"{head}{res['narrative']}\n\n━━━━━━━━━━\n{result}\n{rewards}{limit_note}{ach}", race_result_kb())
+
 
 
 
@@ -313,10 +336,16 @@ async def cb_pvp_accept(cb: CallbackQuery):
     c1, c2 = CAR_CATALOG[pc1["car_key"]], CAR_CATALOG[pc2["car_key"]]
     n1, n2 = p1["first_name"], cb.from_user.first_name or "Соперник"
 
-    # Страховки
+    # Страховки и иммунитет для слабых машин в тире
     p1_ins = bool(p1.get("has_insurance"))
     p2_ins = bool(p2.get("has_insurance"))
-    res = simulate_race(calc_stats(c1, car_upgrades(pc1)), calc_stats(c2, car_upgrades(pc2)), n1, n2, p1_insured=p1_ins, p2_insured=p2_ins)
+    p1_imm = data.is_weakest_in_tier(pc1["car_key"])
+    p2_imm = data.is_weakest_in_tier(pc2["car_key"])
+    res = simulate_race(
+        calc_stats(c1, car_upgrades(pc1)), calc_stats(c2, car_upgrades(pc2)),
+        n1, n2, p1_insured=p1_ins, p2_insured=p2_ins, p1_immune=p1_imm, p2_immune=p2_imm
+    )
+
 
     # Если страховка сработала, снимаем её
     if res.get("insurance_saved") == 1:

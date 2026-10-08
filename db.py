@@ -39,8 +39,11 @@ CREATE TABLE IF NOT EXISTS players (
     chat_nitro_until TEXT DEFAULT NULL,
     gold_wrap INTEGER DEFAULT 0,
     defeated_opponents INTEGER DEFAULT 0,
+    easy_races_today INTEGER DEFAULT 0,
+    easy_races_date TEXT DEFAULT NULL,
     created_at TEXT DEFAULT (datetime('now'))
 );
+
 CREATE TABLE IF NOT EXISTS player_cars (
 
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,7 +107,8 @@ PLAYER_COLUMNS = {
     "username", "first_name", "level", "xp", "money", "coins", "coins_today", "coins_date",
     "reputation", "wins", "losses", "races_total", "pvp_wins", "daily_streak", "last_daily",
     "selected_car_id", "energy", "max_energy", "last_energy_update", "is_admin", "is_banned",
-    "has_insurance", "last_coin_duel", "chat_nitro_until", "gold_wrap", "defeated_opponents"
+    "has_insurance", "last_coin_duel", "chat_nitro_until", "gold_wrap", "defeated_opponents",
+    "easy_races_today", "easy_races_date"
 }
 
 
@@ -129,11 +133,14 @@ async def init_db() -> None:
             ("chat_nitro_until", "TEXT DEFAULT NULL"),
             ("gold_wrap", "INTEGER DEFAULT 0"),
             ("defeated_opponents", "INTEGER DEFAULT 0"),
+            ("easy_races_today", "INTEGER DEFAULT 0"),
+            ("easy_races_date", "TEXT DEFAULT NULL"),
         ]:
             try:
                 await db.execute(f"ALTER TABLE players ADD COLUMN {col} {typ}")
             except Exception:
                 pass
+
 
         try:
             await db.execute("ALTER TABLE races ADD COLUMN bet_type TEXT DEFAULT 'money'")

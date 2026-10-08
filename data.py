@@ -150,6 +150,17 @@ def get_cars_by_class(cls: str) -> list:
     return sorted([(k, v) for k, v in CAR_CATALOG.items() if v["cls"] == cls], key=lambda x: x[1]["price"])
 
 
+def is_weakest_in_tier(car_key: str) -> bool:
+    """Самая слабая (начальная по цене) машина в каждом тире не может разбиться."""
+    car = CAR_CATALOG.get(car_key)
+    if not car:
+        return False
+    cls_cars = get_cars_by_class(car["cls"])
+    if not cls_cars:
+        return False
+    return cls_cars[0][0] == car_key
+
+
 def get_upgrade_cost(car_price: int, upgrade_type: str, current_level: int) -> int:
     base = car_price if car_price > 0 else 20000
     mult = UPGRADE_DEFS[upgrade_type]["mult"]
