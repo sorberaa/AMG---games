@@ -126,8 +126,11 @@ def simulate_race(s1: dict, s2: dict, name1: str, name2: str, p1_insured: bool =
         "crashed": 0,
         "insurance_saved": 1 if (p1_crash and p1_insured) else (2 if (p2_crash and p2_insured) else 0),
         "narrative": saved_note + "\n\n".join(lines),
+        "round_steps": lines,
+        "saved_note": saved_note,
         "margin": margin
     }
+
 
 
 
