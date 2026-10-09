@@ -160,6 +160,14 @@ async def get_player(user_id: int):
         row = await cur.fetchone()
         return dict(row) if row else None
 
+async def get_player_by_username(username: str):
+    uname = username.lstrip("@").strip().lower()
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM players WHERE LOWER(username) = ?", (uname,))
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
 
 async def create_player(user_id: int, username, first_name: str) -> dict:
     async with _connect() as db:

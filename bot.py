@@ -29,8 +29,11 @@ async def start_web():
     app.router.add_get("/health", health)
     runner = web.AppRunner(app)
     await runner.setup()
-    await web.TCPSite(runner, "0.0.0.0", PORT).start()
-    log.info("Health server on :%s", PORT)
+    try:
+        await web.TCPSite(runner, "0.0.0.0", PORT).start()
+        log.info("Health server on :%s", PORT)
+    except Exception as e:
+        log.warning("Web port %s busy (%s), continuing polling", PORT, e)
     return runner
 
 
@@ -54,6 +57,9 @@ async def main():
         BotCommand(command="boss", description="👾 Рейд на босса в чате"),
         BotCommand(command="tournament", description="🏆 Гран-при турнир чата"),
         BotCommand(command="chase", description="🚓 Погоня от полиции"),
+        BotCommand(command="quiz", description="🧠 AMG Авто-викторина"),
+        BotCommand(command="airdrop", description="📦 Сброс лутбокса AMG"),
+        BotCommand(command="royale", description="💥 Королевская битва / Гонка на выбывание"),
         BotCommand(command="garage", description="🚗 Гараж"),
         BotCommand(command="profile", description="👤 Профиль"),
         BotCommand(command="daily", description="🎁 Бонус дня"),

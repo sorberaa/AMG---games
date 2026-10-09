@@ -379,3 +379,382 @@ async def cb_chase_act(cb: CallbackQuery):
         except Exception:
             pass
 
+
+# ── 1. Авто-Викторина AMG в чате (/quiz) ─────────────────────
+
+QUIZ_QUESTIONS = [
+    {
+        "q": "Какой первый гоночный седан AMG получил легендарное прозвище «Красный кабан» (Rote Sau)?",
+        "opts": ["Mercedes 300 SEL 6.8 AMG", "Mercedes 190E 2.5-16 Evo II", "Mercedes SLS AMG GT3", "Mercedes 500E W124"],
+        "correct": 0,
+        "fact": "В 1971 году тяжелый седан 300 SEL 6.8 AMG сенсационно занял 2-е место в 24 часах Спа!"
+    },
+    {
+        "q": "Какой силовой агрегат установлен в гиперкаре Mercedes-AMG ONE?",
+        "opts": ["1.6L V6 Turbo из Formula 1 + 4 электромотора", "4.0L V8 Biturbo", "6.0L V12 Biturbo", "2.0L M139 гибрид"],
+        "correct": 0,
+        "fact": "Мотор напрямую взят из чемпионского болида F1 W07 и крутится до 11 000 об/мин!"
+    },
+    {
+        "q": "Сколько лошадиных сил развивает трековый Mercedes-AMG GT Black Series?",
+        "opts": ["730 л.с.", "585 л.с.", "639 л.с.", "843 л.с."],
+        "correct": 0,
+        "fact": "GT Black Series развивает 730 л.с. с плоским коленвалом и установил рекорд Нюрбургринга!"
+    },
+    {
+        "q": "Что означает девиз ручной сборки двигателей AMG?",
+        "opts": ["«One Man, One Engine»", "«Power and Precision»", "«Handcrafted for Speed»", "«Made in Affalterbach»"],
+        "correct": 0,
+        "fact": "Каждый V8 собирается вручную одним мастером, который крепит на мотор свою именную плакетку!"
+    },
+    {
+        "q": "В каком немецком городе находится историческая штаб-квартира Mercedes-AMG?",
+        "opts": ["Аффальтербах (Affalterbach)", "Штутгарт", "Мюнхен", "Ингольштадт"],
+        "correct": 0,
+        "fact": "Аффальтербах — дом и завод AMG с 1976 года!"
+    },
+    {
+        "q": "Какой AMG является самым мощным серийным гибридом E Performance?",
+        "opts": ["AMG GT 63 S E Performance (843 л.с.)", "AMG C63 S E Performance", "AMG SL 63", "AMG G63 4x4²"],
+        "correct": 0,
+        "fact": "GT 63 S E Performance развивает невероятные 843 л.с. и более 1400 Нм крутящего момента!"
+    },
+    {
+        "q": "Какой мотор AMG признан самым мощным 2.0-литровым 4-цилиндровым серийным двигателем в мире?",
+        "opts": ["M139 (до 421 л.с.)", "M177", "M133", "M256"],
+        "correct": 0,
+        "fact": "Турбомотор M139 выдает 421 л.с. в стоке на моделях A45 S и CLA 45 S!"
+    },
+    {
+        "q": "Как расшифровывается аббревиатура AMG?",
+        "opts": ["Aufrecht, Melcher, Großaspach", "Auto Motorsport Germany", "Advanced Mercedes Gears", "Automotive Master Group"],
+        "correct": 0,
+        "fact": "Ауфрехт (A), Мельхер (M) и Гроссаспах (G) — город рождения основателя Ганса Ауфрехта!"
+    }
+]
+
+ACTIVE_QUIZZES: dict = {}  # chat_id -> {"correct": int, "q": dict, "active": bool}
+
+
+@router.message(Command("quiz"))
+async def cmd_quiz(message: Message):
+    if message.chat.type == "private":
+        return await message.answer("❓ Викторина доступна только в группах! Добавь бота в чат и пиши /quiz")
+
+    chat_id = message.chat.id
+    q_data = random.choice(QUIZ_QUESTIONS)
+    # Перемешиваем варианты
+    opts_with_idx = list(enumerate(q_data["opts"]))
+    random.shuffle(opts_with_idx)
+
+    correct_new_idx = 0
+    shuffled_opts = []
+    for new_idx, (orig_idx, opt_text) in enumerate(opts_with_idx):
+        shuffled_opts.append(opt_text)
+        if orig_idx == q_data["correct"]:
+            correct_new_idx = new_idx
+
+    ACTIVE_QUIZZES[chat_id] = {
+        "correct": correct_new_idx,
+        "q": q_data,
+        "active": True
+    }
+
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton as Btn
+    rows = []
+    for i, opt in enumerate(shuffled_opts):
+        rows.append([Btn(text=f"{chr(65+i)}. {opt}", callback_data=f"quiz:{i}")])
+
+    await message.answer(
+        "🧠 <b>АВТО-ВИКТОРИНА AMG ДЛЯ ЧАТА!</b>\n\n"
+        f"<b>Вопрос:</b>\n{q_data['q']}\n\n"
+        "<i>Кто первым нажмет правильный ответ — забирает +25 🪙 монет и +150 XP!</i>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows)
+    )
+
+
+@router.callback_query(F.data.startswith("quiz:"))
+async def cb_quiz_answer(cb: CallbackQuery):
+    chat_id = cb.message.chat.id
+    qz = ACTIVE_QUIZZES.get(chat_id)
+    if not qz or not qz.get("active"):
+        return await cb.answer("Эта викторина уже завершена! Запустите новую через /quiz", show_alert=True)
+
+    ans_idx = int(cb.data.split(":")[1])
+    uid = cb.from_user.id
+    uname = cb.from_user.first_name
+
+    if ans_idx == qz["correct"]:
+        qz["active"] = False
+        await db.add_coins_admin(uid, 25, reason="Победа в чат-викторине")
+        await db.add_xp(uid, 150)
+        await cb.answer("🎉 ПРАВИЛЬНО! Ты выиграл!", show_alert=True)
+        fact_text = qz["q"]["fact"]
+        await cb.message.edit_text(
+            f"🏆 <b>ПОБЕДИТЕЛЬ ВИКТОРИНЫ: {uname}!</b>\n\n"
+            f"✅ <b>Верный ответ:</b> {qz['q']['opts'][qz['q']['correct']]}\n\n"
+            f"💡 <i>{fact_text}</i>\n\n"
+            f"💰 Награда <b>+25 🪙 монет</b> и <b>+150 XP</b> начислена {uname}!\n"
+            "Запустить ещё: <code>/quiz</code>"
+        )
+        ACTIVE_QUIZZES.pop(chat_id, None)
+    else:
+        await cb.answer("❌ Неверно! Попробуй другой вариант или дай шанс другим!", show_alert=True)
+
+
+# ── 2. Аирдроп контейнера с лутом (/airdrop, /drop) ──────────
+
+AIRDROPS: dict = {}  # chat_id -> {"participants": set, "names": dict, "status": str}
+
+
+@router.message(Command("airdrop", "drop"))
+async def cmd_airdrop(message: Message):
+    if message.chat.type == "private":
+        return await message.answer("📦 Аирдроп доступен только в группах! Добавь бота в чат и пиши /airdrop")
+
+    chat_id = message.chat.id
+    if chat_id in AIRDROPS and AIRDROPS[chat_id]["status"] == "waiting":
+        return await message.answer("⚠️ В чате уже сброшен контейнер! Жмите кнопку ниже, чтобы взломать.")
+
+    AIRDROPS[chat_id] = {
+        "participants": set(),
+        "names": {},
+        "status": "waiting"
+    }
+
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton as Btn
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="🧰 Взломать контейнер!", callback_data="drop:loot")],
+        [Btn(text="💥 Открыть контейнер (мин. 2)!", callback_data="drop:open")],
+    ])
+
+    gif_tag = f"<a href='{data.AMG_GIFS['boss']}'>&#8205;</a>"
+    await message.answer(
+        f"{gif_tag}📦 <b>В ЧАТ СБРОШЕН КОНТЕЙНЕР AMG PERFORMANCE!</b>\n\n"
+        f"Инициатор сброса: <b>{message.from_user.first_name}</b>\n\n"
+        "Контрабандный груз приземлился в центре города! Все желающие забрать долю — нажимайте <b>«Взломать контейнер»</b>.\n"
+        "Добыча распределится между всеми, кто успел отметиться!\n\n"
+        "👥 Участников взлома: <b>0</b>",
+        reply_markup=kb
+    )
+
+
+@router.callback_query(F.data == "drop:loot")
+async def cb_drop_loot(cb: CallbackQuery):
+    chat_id = cb.message.chat.id
+    dr = AIRDROPS.get(chat_id)
+    if not dr or dr["status"] != "waiting":
+        return await cb.answer("Контейнер уже вскрыт или исчез!", show_alert=True)
+
+    uid = cb.from_user.id
+    if uid in dr["participants"]:
+        return await cb.answer("Ты уже в списке вскрывающих! Жди открытия 🧰", show_alert=True)
+
+    dr["participants"].add(uid)
+    dr["names"][uid] = cb.from_user.first_name
+    count = len(dr["participants"])
+    await cb.answer(f"Ты подключился к взлому! (#{count}) 🔓")
+
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton as Btn
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="🧰 Взломать контейнер!", callback_data="drop:loot")],
+        [Btn(text=f"💥 Открыть контейнер ({count} чел.)!", callback_data="drop:open")],
+    ])
+
+    names_str = "\n".join(f"• <b>{dr['names'][u]}</b>" for u in dr["participants"])
+    try:
+        gif_tag = f"<a href='{data.AMG_GIFS['boss']}'>&#8205;</a>"
+        await cb.message.edit_text(
+            f"{gif_tag}📦 <b>В ЧАТ СБРОШЕН КОНТЕЙНЕР AMG PERFORMANCE!</b>\n\n"
+            f"<b>Команда взломщиков ({count}):</b>\n{names_str}\n\n"
+            "Нажимайте открыть, когда все собрались! 👇",
+            reply_markup=kb
+        )
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data == "drop:open")
+async def cb_drop_open(cb: CallbackQuery):
+    chat_id = cb.message.chat.id
+    dr = AIRDROPS.get(chat_id)
+    if not dr or dr["status"] != "waiting":
+        return await cb.answer("Контейнер уже открыт!", show_alert=True)
+
+    if len(dr["participants"]) < 2:
+        return await cb.answer("Нужно минимум 2 участника для вскрытия тяжелого замка!", show_alert=True)
+
+    dr["status"] = "opened"
+    await cb.answer("💥 Контейнер распахнут!")
+
+    plist = list(dr["participants"])
+    random.shuffle(plist)
+
+    medals = ["🥇", "🥈", "🥉"]
+    res_lines = []
+    for i, uid in enumerate(plist):
+        name = dr["names"][uid]
+        m = medals[i] if i < 3 else "📦"
+        if i == 0:
+            coins, money, xp = 40, 30000, 300
+        elif i == 1:
+            coins, money, xp = 25, 20000, 200
+        elif i == 2:
+            coins, money, xp = 15, 12000, 150
+        else:
+            coins, money, xp = 8, 8000, 80
+
+        await db.add_coins_admin(uid, coins, reason="Аирдроп контейнера в чате")
+        await db.add_money(uid, money)
+        await db.add_xp(uid, xp)
+        res_lines.append(f"{m} <b>{name}</b> — <b>+{coins} 🪙</b>, +${fmt(money)}, +{xp} XP")
+
+    gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
+    await cb.message.edit_text(
+        f"{gif_tag}🎉 <b>КОНТЕЙНЕР AMG PERFORMANCE ВСКРЫТ!</b>\n\n"
+        "Лут поделён между участниками рейда:\n\n"
+        + "\n".join(res_lines) +
+        "\n\n<i>Запустить новый дроп: /airdrop</i>"
+    )
+    AIRDROPS.pop(chat_id, None)
+
+
+# ── 3. Королевская битва на выбывание (/royale) ──────────────
+
+ROYALES: dict = {}  # chat_id -> {"participants": list, "names": dict, "cars": dict, "status": str}
+
+CRASH_REASONS = [
+    "на скорости 310 км/ч пробил радиатор и залил мотор антифризом",
+    "не удержал занос на мокром асфальте и развернулся поперек трассы",
+    "поймал гидроудар турбины на перегазовке",
+    "нарвался на полицейский кордон с шипами",
+    "перегрел тормоза перед крутой шпилькой и вылетел в гравий",
+    "ошибся с передачей и разорвал сцепление в клочья",
+]
+
+
+@router.message(Command("royale", "elimination"))
+async def cmd_royale(message: Message):
+    if message.chat.type == "private":
+        return await message.answer("👑 Битва на выбывание доступна только в группах! Пиши /royale в чате.")
+
+    chat_id = message.chat.id
+    if chat_id in ROYALES and ROYALES[chat_id]["status"] == "recruiting":
+        return await message.answer("⚠️ Битва на выбывание уже собирается! Жмите кнопку ниже.")
+
+    ROYALES[chat_id] = {
+        "participants": [],
+        "names": {},
+        "cars": {},
+        "status": "recruiting"
+    }
+
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton as Btn
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="🏎 Занять место на старте!", callback_data="royale:join")],
+        [Btn(text="🟢 СТАРТ ВЫБЫВАНИЯ (мин. 3)", callback_data="royale:start")],
+    ])
+
+    gif_tag = f"<a href='{data.AMG_GIFS['race']}'>&#8205;</a>"
+    await message.answer(
+        f"{gif_tag}👑 <b>КОРОЛЕВСКАЯ БИТВА НА ВЫБЫВАНИЕ (ROYALE)!</b>\n\n"
+        f"Организатор: <b>{message.from_user.first_name}</b>\n\n"
+        "Правила просты: каждый круг самый неудачливый гонщик вылетает из гонки!\n"
+        "Выживает только один — <b>Король Автобана</b> забирает джекпот: <b>+50 🪙 монет</b> и <b>+$50,000</b>!\n\n"
+        "Участников: <b>0</b>",
+        reply_markup=kb
+    )
+
+
+@router.callback_query(F.data == "royale:join")
+async def cb_royale_join(cb: CallbackQuery):
+    chat_id = cb.message.chat.id
+    ry = ROYALES.get(chat_id)
+    if not ry or ry["status"] != "recruiting":
+        return await cb.answer("Набор закрыт!", show_alert=True)
+
+    uid = cb.from_user.id
+    if uid in ry["participants"]:
+        return await cb.answer("Ты уже на стартовой решетке!", show_alert=True)
+
+    pc = await db.get_selected_car(uid)
+    if not pc:
+        return await cb.answer("Сначала выбери авто в /start!", show_alert=True)
+
+    ry["participants"].append(uid)
+    ry["names"][uid] = cb.from_user.first_name
+    ry["cars"][uid] = pc
+    count = len(ry["participants"])
+    await cb.answer(f"Ты в списке гладиаторов! (#{count}) 🔥")
+
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton as Btn
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="🏎 Занять место на старте!", callback_data="royale:join")],
+        [Btn(text=f"🟢 СТАРТ ВЫБЫВАНИЯ ({count} чел.)", callback_data="royale:start")],
+    ])
+
+    names_str = "\n".join(f"• <b>{ry['names'][u]}</b> ({CAR_CATALOG[ry['cars'][u]['car_key']]['name']})" for u in ry["participants"])
+    try:
+        gif_tag = f"<a href='{data.AMG_GIFS['race']}'>&#8205;</a>"
+        await cb.message.edit_text(
+            f"{gif_tag}👑 <b>КОРОЛЕВСКАЯ БИТВА НА ВЫБЫВАНИЕ (ROYALE)!</b>\n\n"
+            f"<b>Стартовая решетка ({count}):</b>\n{names_str}\n\n"
+            "Жмите старт, когда все бойцы собраны! 👇",
+            reply_markup=kb
+        )
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data == "royale:start")
+async def cb_royale_start(cb: CallbackQuery):
+    chat_id = cb.message.chat.id
+    ry = ROYALES.get(chat_id)
+    if not ry or ry["status"] != "recruiting":
+        return await cb.answer("Битва не найдена!", show_alert=True)
+
+    if len(ry["participants"]) < 2:
+        return await cb.answer("Нужно минимум 2 участника для гонки на выбывание!", show_alert=True)
+
+    ry["status"] = "racing"
+    await cb.answer("🏁 Битва началась!")
+
+    import asyncio
+    alive = list(ry["participants"])
+    random.shuffle(alive)
+
+    rounds_log = []
+    round_num = 1
+
+    await cb.message.edit_text("🚦 <b>ЗЕЛЁНЫЙ СВЕТ! МОТОРЫ РЕВУТ НА ПРЕДЕЛЕ!</b>\nНачалась гонка на выживание...")
+    await asyncio.sleep(2)
+
+    while len(alive) > 1:
+        # Выбираем выбывшего с учетом шанса от рейтинга авто
+        eliminated = alive.pop(random.randint(0, len(alive) - 1))
+        elim_name = ry["names"][eliminated]
+        reason = random.choice(CRASH_REASONS)
+        rounds_log.append(f"💥 <b>Круг {round_num}:</b> <i>{elim_name}</i> {reason}! (Выбыл ❌)")
+        round_num += 1
+
+    winner_id = alive[0]
+    winner_name = ry["names"][winner_id]
+    winner_car = CAR_CATALOG[ry["cars"][winner_id]["car_key"]]["name"]
+
+    # Награда победителю
+    await db.add_coins_admin(winner_id, 50, reason="1 место в Royal Выбывании")
+    await db.add_money(winner_id, 50000)
+    await db.add_xp(winner_id, 500)
+
+    gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
+    log_text = "\n".join(rounds_log)
+    await cb.message.edit_text(
+        f"{gif_tag}👑 <b>ФИНИШ БИТВЫ НА ВЫБЫВАНИЕ!</b>\n\n"
+        f"<b>Хроника заезда:</b>\n{log_text}\n\n"
+        f"🏆 <b>ЕДИНСТВЕННЫЙ ВЫЖИВШИЙ ЧЕМПИОН:</b>\n"
+        f"🥇 <b>{winner_name}</b> на <b>{winner_car}</b>!\n\n"
+        f"💰 Награда победителя: <b>+50 🪙 монет</b>, <b>+$50,000</b> и <b>+500 XP</b>!\n"
+        "Сыграть ещё: <code>/royale</code>"
+    )
+    ROYALES.pop(chat_id, None)
+

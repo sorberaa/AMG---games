@@ -19,6 +19,7 @@ class Adm(StatesGroup):
     car_key = State()
     level = State()
     broadcast = State()
+    add_admin = State()
 
 
 # ── Клавиатуры ───────────────────────────────────────────────
@@ -67,9 +68,82 @@ async def cmd_myid(message: Message):
 @router.message(Command("admin"))
 async def cmd_admin(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
-        return
+        return await message.answer("❌ У вас нет доступа к админ-панели.")
     await state.clear()
     await message.answer(MAIN_TEXT, reply_markup=main_kb())
+
+
+@router.message(Command("addadmin"))
+async def cmd_addadmin(message: Message):
+    if not is_admin(message.from_user.id):
+        return await message.answer("❌ Назначать админов могут только главные владельцы.")
+
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target_u = message.reply_to_message.from_user
+        if target_u.is_bot:
+            return await message.answer("❌ Бота нельзя назначить администратором.")
+        target_id = target_u.id
+        p = await db.get_player(target_id)
+        if not p:
+            p = await db.create_player(target_id, target_u.username, target_u.first_name)
+        await db.update_player(target_id, is_admin=1)
+        set_admin_cache(target_id, True)
+        return await message.answer(
+            f"✅ <b>{target_u.first_name} назначен администратором AMG Racing!</b>\n\n"
+            f"🆔 ID: <code>{target_id}</code> (@{target_u.username or '—'})\n"
+            f"👑 Ему доступна команда /admin",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[Btn(text="👤 Карточка игрока", callback_data=f"adm:p:{target_id}")]])
+        )
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        return await message.answer(
+            "👑 <b>КАК НАЗНАЧИТЬ АДМИНА В AMG RACING:</b>\n\n"
+            "• <b>Способ 1:</b> ответьте на сообщение игрока в группе командой <code>/addadmin</code>\n"
+            "• <b>Способ 2:</b> <code>/addadmin 123456789</code> (по Telegram ID)\n"
+            "• <b>Способ 3:</b> <code>/addadmin @username</code> (если он уже писал боту)\n"
+            "• <b>Способ 4:</b> /admin ➔ «👑 Список админов» ➔ «👥 Выбрать из списка игроков»",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[Btn(text="👑 В админку", callback_data="adm:main")]])
+        )
+
+    target_str = parts[1].strip()
+    target_id = None
+    target_name = None
+    target_uname = None
+
+    if target_str.isdigit():
+        target_id = int(target_str)
+    else:
+        uname = target_str.lstrip("@").strip()
+        p = await db.get_player_by_username(uname)
+        if p:
+            target_id = p["user_id"]
+            target_name = p["first_name"]
+            target_uname = p["username"]
+        else:
+            return await message.answer(
+                f"⚠️ <b>Игрок @{uname} пока не найден в базе бота!</b>\n\n"
+                "Telegram не передает ботам информацию о незнакомых пользователях только по @юзернейму, пока они хотя бы раз не нажали /start в боте.\n\n"
+                "<b>Решение:</b>\n"
+                "1. Ответьте на его сообщение в группе командой <code>/addadmin</code>\n"
+                "2. Или укажите его цифровой Telegram ID: <code>/addadmin ЦИФРЫ</code>",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[Btn(text="👑 В админку", callback_data="adm:main")]])
+            )
+
+    p = await db.get_player(target_id)
+    if not p:
+        p = await db.create_player(target_id, target_uname, target_name or f"Admin_{target_id}")
+    await db.update_player(target_id, is_admin=1)
+    set_admin_cache(target_id, True)
+    await message.answer(
+        f"✅ <b>{p['first_name']} назначен администратором AMG Racing!</b>\n\n"
+        f"🆔 ID: <code>{target_id}</code>\n"
+        f"👑 Доступна админ-панель по команде /admin",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [Btn(text="👤 Карточка игрока", callback_data=f"adm:p:{target_id}")],
+            [Btn(text="👑 В админку", callback_data="adm:main")]
+        ])
+    )
 
 
 @router.callback_query(F.data.startswith("adm:"))
@@ -99,6 +173,13 @@ async def adm_router(cb: CallbackQuery, state: FSMContext):
         await safe_edit(cb, "🔎 Отправь <b>ID</b> или <b>@username</b> игрока:", back_kb())
     elif action == "admins":
         await show_admins(cb)
+    elif action == "add_admin":
+        await state.set_state(Adm.add_admin)
+        await safe_edit(cb, "➕ <b>Добавление админа</b>\n\nОтправь цифровой <b>Telegram ID</b>, перешли сюда сообщение от игрока, либо укажи его <b>@username</b>:\n\n<i>Для отмены напиши: /admin</i>", back_kb("adm:admins"))
+    elif action == "pick_admin_user":
+        await show_pick_admin_user(cb, int(parts[2]) if len(parts) > 2 else 0)
+    elif action == "make_adm_direct":
+        await make_adm_direct(cb, int(parts[2]))
     elif action == "broadcast":
         await state.set_state(Adm.broadcast)
         await safe_edit(cb, "📢 Отправь текст рассылки (поддерживается HTML).\nДля отмены — /admin", back_kb())
@@ -214,9 +295,52 @@ async def show_admins(cb: CallbackQuery):
         if uid in ADMIN_IDS:
             continue
         p = await db.get_player(uid)
-        lines.append(f"👑 {p['first_name']} — <code>{uid}</code>")
-    await safe_edit(cb, "👑 <b>Администраторы</b>\n\n" + ("\n".join(lines) or "Нет") +
-                    "\n\n<i>Назначить: Игроки → карточка → «Дать админку»</i>", back_kb())
+        if p:
+            lines.append(f"👑 <b>{p['first_name']}</b> — <code>{uid}</code>")
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="➕ Ввести ID или переслать", callback_data="adm:add_admin")],
+        [Btn(text="👥 Выбрать из списка игроков", callback_data="adm:pick_admin_user:0")],
+        [Btn(text="◀️ Назад", callback_data="adm:main")]
+    ])
+    await safe_edit(cb, "👑 <b>Администраторы AMG Racing</b>\n\n" + ("\n".join(lines) or "Нет") +
+                    "\n\n<i>Выберите способ добавления админа:</i>", kb)
+
+
+async def show_pick_admin_user(cb: CallbackQuery, page: int = 0):
+    players = await db.get_all_players()
+    non_admins = [p for p in players if not p.get("is_admin") and p["user_id"] not in ADMIN_IDS]
+    if not non_admins:
+        return await safe_edit(cb, "👥 Все игроки в базе уже назначены админами!", back_kb("adm:admins"))
+    per = 6
+    rows = []
+    for p in non_admins[page * per : (page + 1) * per]:
+        rows.append([
+            Btn(text=f"👤 {p['first_name']} (@{p.get('username') or p['user_id']})", callback_data=f"adm:p:{p['user_id']}"),
+            Btn(text="👑 Назначить", callback_data=f"adm:make_adm_direct:{p['user_id']}")
+        ])
+    nav = []
+    if page > 0:
+        nav.append(Btn(text="◀️", callback_data=f"adm:pick_admin_user:{page - 1}"))
+    if (page + 1) * per < len(non_admins):
+        nav.append(Btn(text="▶️", callback_data=f"adm:pick_admin_user:{page + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([Btn(text="◀️ Назад к админам", callback_data="adm:admins")])
+    await safe_edit(cb, f"👥 <b>Выбор из игроков</b> ({len(non_admins)})\nНажмите «👑 Назначить» напротив нужного игрока:", InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+async def make_adm_direct(cb: CallbackQuery, uid: int):
+    p = await db.get_player(uid)
+    if not p:
+        return await cb.answer("Игрок не найден!", show_alert=True)
+    await db.update_player(uid, is_admin=1)
+    set_admin_cache(uid, True)
+    await cb.answer(f"✅ {p['first_name']} назначен админом!", show_alert=True)
+    try:
+        await cb.bot.send_message(uid, "👑 Тебе выданы права администратора в AMG Racing! Команда: /admin")
+    except Exception:
+        pass
+    await show_admins(cb)
 
 
 async def toggle_admin(cb: CallbackQuery, uid: int):
@@ -374,3 +498,77 @@ async def on_broadcast(message: Message, state: FSMContext):
             failed += 1
         await asyncio.sleep(0.05)
     await status.edit_text(f"📢 Рассылка завершена\n✅ Доставлено: {sent}\n❌ Ошибок: {failed}", reply_markup=back_kb())
+
+
+@router.message(Adm.add_admin)
+async def on_add_admin(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return await state.clear()
+
+    target_id = None
+    target_name = None
+    target_uname = None
+
+    if message.forward_origin:
+        sender = getattr(message.forward_origin, "sender_user", None)
+        if sender:
+            target_id = sender.id
+            target_name = sender.first_name
+            target_uname = sender.username
+    elif message.forward_from:
+        target_id = message.forward_from.id
+        target_name = message.forward_from.first_name
+        target_uname = message.forward_from.username
+    elif message.reply_to_message and message.reply_to_message.from_user:
+        target_id = message.reply_to_message.from_user.id
+        target_name = message.reply_to_message.from_user.first_name
+        target_uname = message.reply_to_message.from_user.username
+    elif message.contact:
+        target_id = message.contact.user_id
+        target_name = message.contact.first_name
+    elif message.text:
+        text = message.text.strip()
+        if "t.me/" in text:
+            text = text.split("t.me/")[-1].split("/")[0].split("?")[0].strip()
+        if text.isdigit():
+            target_id = int(text)
+        else:
+            uname = text.lstrip("@").strip()
+            p = await db.get_player_by_username(uname)
+            if p:
+                target_id = p["user_id"]
+                target_name = p["first_name"]
+                target_uname = p["username"]
+            else:
+                return await message.answer(
+                    f"⚠️ <b>Игрок @{uname} пока не найден в базе бота!</b>\n\n"
+                    "Telegram не позволяет ботам узнать цифровой ID нового пользователя только по @юзернейму, пока он ни разу не нажимал /start в боте.\n\n"
+                    "<b>Решение:</b>\n"
+                    "1. Перешлите сюда любое сообщение от него\n"
+                    "2. Ответьте на его сообщение в группе командой <code>/addadmin</code>\n"
+                    "3. Отправьте его цифровой Telegram ID",
+                    reply_markup=back_kb("adm:admins")
+                )
+
+    if not target_id:
+        return await message.answer("❌ Не удалось определить ID. Отправьте цифровой ID или перешлите сообщение игрока.")
+
+    await state.clear()
+    p = await db.get_player(target_id)
+    if not p:
+        p = await db.create_player(target_id, target_uname, target_name or f"User_{target_id}")
+    await db.update_player(target_id, is_admin=1)
+    set_admin_cache(target_id, True)
+    try:
+        await message.bot.send_message(target_id, "👑 Тебе выданы права администратора в AMG Racing! Команда: /admin")
+    except Exception:
+        pass
+    await message.answer(
+        f"✅ <b>{p['first_name']} назначен администратором AMG Racing!</b>\n\n"
+        f"🆔 ID: <code>{target_id}</code> (@{target_uname or '—'})\n"
+        f"👑 Доступна админ-панель по команде /admin",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [Btn(text="👤 Карточка игрока", callback_data=f"adm:p:{target_id}")],
+            [Btn(text="👑 В админку", callback_data="adm:main")]
+        ])
+    )
