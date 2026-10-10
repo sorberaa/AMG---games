@@ -161,10 +161,32 @@ COIN_SHOP = {
     "energy_plus":   {"name": "🔋 +1 к макс. энергии", "price": 400, "desc": "Навсегда +1 к максимуму (до 20)"},
     "case_basic":    {"name": "📦 Обычный кейс", "price": 100, "desc": "Деньги, XP или машина класса D–B"},
     "case_elite":    {"name": "🎁 Элитный кейс", "price": 350, "desc": "Крупные призы и шанс на класс A–SS"},
+    "case_legendary":{"name": "👑 Легендарный ларец ONE", "price": 750, "desc": "Шанс выбить гиперкар AMG ONE и миллионы $"},
     "xp_boost":      {"name": "📈 +500 XP", "price": 120, "desc": "Мгновенно +500 опыта"},
     "insurance":     {"name": "🛡 Страховка AMG", "price": 150, "desc": "Защищает машину от аварии (спасет 1 раз)"},
     "chat_nitro":    {"name": "⚡ Нитро для чата", "price": 80, "desc": "+10% скорости во всех командных гонках чата на 24ч"},
     "gold_wrap":     {"name": "✨ Золотой винил", "price": 250, "desc": "+15% к авторитету и наградам в чате"},
+}
+
+CASES = {
+    "case_basic": {
+        "name": "📦 Базовый сундук",
+        "price": 100,
+        "emoji": "📦",
+        "desc": "Деньги, опыт и шанс выбить машины классов D–B (A35, CLA 45 S, C63 S).",
+    },
+    "case_elite": {
+        "name": "🎁 Элитный кейс AMG",
+        "price": 350,
+        "emoji": "🎁",
+        "desc": "Солидный куш до $250k, много XP и суперкары E63 S, AMG GT, GT R, Black Series.",
+    },
+    "case_legendary": {
+        "name": "👑 Легендарный ларец ONE",
+        "price": 750,
+        "emoji": "👑",
+        "desc": "До $750k наличных, 3000 XP и шанс забрать гиперкары SS и сам Mercedes-AMG ONE!",
+    },
 }
 
 # AMG GIFs (проверенные прямые ссылки Giphy)
@@ -173,6 +195,7 @@ AMG_GIFS = {
     "win": "https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif",
     "crash": "https://media.giphy.com/media/26n6WywStCAfdHUM8/giphy.gif",
     "boss": "https://media.giphy.com/media/l41JGlWa1xOjJSsV2/giphy.gif",
+    "chest": "https://media.giphy.com/media/26AHONQ79FdWZhAI0/giphy.gif",
     "boss_rage": "https://media.giphy.com/media/l4pTfSeH65zpQW7yo/giphy.gif",
     "race": "https://media.giphy.com/media/MDJ9IbxxvDUQM/giphy.gif",
     "burnout": "https://media.giphy.com/media/3o7TKsWZBdg99GS956/giphy.gif",
@@ -324,6 +347,11 @@ CASE_DROPS = {
         (35, "money", 50000), (20, "money", 120000), (15, "xp", 1500),
         (12, "car", "e63s"), (8, "car", "amg_gt"), (5, "car", "gt63s"),
         (3, "car", "amg_gtr"), (1.5, "car", "gt_bs"), (0.5, "car", "amg_one"),
+    ],
+    "case_legendary": [
+        (25, "money", 300000), (20, "money", 750000), (15, "xp", 3000),
+        (12, "car", "gt63se"), (10, "car", "amg_gtr"), (8, "car", "gtr_pro"),
+        (6, "car", "gt_bs"), (4, "car", "amg_one"),
     ],
 }
 

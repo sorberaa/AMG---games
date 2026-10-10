@@ -101,6 +101,14 @@ CREATE TABLE IF NOT EXISTS boss_damage (
     damage INTEGER DEFAULT 0,
     PRIMARY KEY (chat_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS withdrawals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    amount INTEGER NOT NULL,
+    wallet_info TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    created_at TEXT DEFAULT (datetime('now'))
+);
 """
 
 UPGRADE_COLUMNS = {"engine", "turbo", "suspension", "tires", "nitro", "ecu", "body_kit"}
@@ -652,5 +660,46 @@ async def delete_boss(chat_id: int):
         await db.execute("DELETE FROM bosses WHERE chat_id = ?", (chat_id,))
         await db.execute("DELETE FROM boss_damage WHERE chat_id = ?", (chat_id,))
         await db.commit()
+
+
+# ── Заявки на вывод монет ─────────────────────────────────────
+
+async def create_withdrawal(user_id: int, amount: int, wallet_info: str) -> int:
+    async with _connect() as db:
+        cur = await db.execute(
+            "INSERT INTO withdrawals (user_id, amount, wallet_info) VALUES (?, ?, ?)",
+            (user_id, amount, wallet_info)
+        )
+        await db.commit()
+        return cur.lastrowid
+
+
+async def get_user_withdrawals(user_id: int, limit: int = 5) -> list:
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM withdrawals WHERE user_id = ? ORDER BY id DESC LIMIT ?",
+            (user_id, limit)
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_pending_withdrawals(limit: int = 15) -> list:
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT w.*, COALESCE(p.first_name, 'Гонщик') AS first_name, p.username FROM withdrawals w "
+            "LEFT JOIN players p ON p.user_id = w.user_id "
+            "WHERE w.status = 'pending' ORDER BY w.id ASC LIMIT ?",
+            (limit,)
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def update_withdrawal_status(w_id: int, status: str) -> bool:
+    async with _connect() as db:
+        cur = await db.execute("UPDATE withdrawals SET status = ? WHERE id = ?", (status, w_id))
+        await db.commit()
+        return cur.rowcount > 0
 
 

@@ -2,7 +2,7 @@
 from aiogram.types import InlineKeyboardButton as Btn, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from data import (CAR_CATALOG, CAR_CLASSES, CAR_CLASS_EMOJIS, CAR_CLASS_NAMES, CAR_COLORS, COIN_SHOP,
+from data import (CAR_CATALOG, CAR_CLASSES, CAR_CLASS_EMOJIS, CAR_CLASS_NAMES, CAR_COLORS, CASES, COIN_SHOP,
                   DIFFICULTY_EMOJI, STREET_OPPONENTS, UPGRADE_DEFS, fmt, get_upgrade_cost)
 
 
@@ -12,11 +12,18 @@ def back_kb(cb: str = "menu", text: str = "◀️ Назад") -> InlineKeyboard
 
 def main_menu_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
-    for text, cb in [("🚗 Гараж", "garage:0"), ("🏪 Автосалон", "shop"),
-                     ("🏁 Гонка", "race"), ("🔧 Тюнинг", "tuning"),
-                     ("👤 Профиль", "profile"), ("🏆 Топ", "top:wins"),
-                     ("🎁 Бонус дня", "daily"), ("🪙 Магазин монет", "cshop"),
-                     ("❓ Помощь", "help")]:
+    for text, cb in [
+        ("🚗 Гараж", "garage:0"),
+        ("🔧 Тюнинг", "tuning"),
+        ("🏪 Автосалон", "shop"),
+        ("🧰 Сундуки AMG", "cases"),
+        ("🪙 Монеты / Вывод", "cshop"),
+        ("🎁 Бонус дня", "daily"),
+        ("👤 Профиль", "profile"),
+        ("🏆 Топ игроков", "top:wins"),
+        ("👥 Играть в группе 🏁", "group_info"),
+        ("❓ Помощь", "help")
+    ]:
         b.button(text=text, callback_data=cb)
     b.adjust(2)
     return b.as_markup()
@@ -243,9 +250,40 @@ def daily_kb() -> InlineKeyboardMarkup:
 
 def coin_shop_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
+    b.button(text="💸 Заказать вывод монет", callback_data="c_withdraw")
+    b.button(text="💱 Обмен монет на кэш $", callback_data="c_exchange")
+    b.button(text="🧰 Открыть сундуки AMG", callback_data="cases")
     for key, item in COIN_SHOP.items():
+        if key.startswith("case_"):
+            continue
         b.button(text=f"{item['name']} — {item['price']} 🪙", callback_data=f"cbuy:{key}")
     b.button(text="🏠 Меню", callback_data="menu")
     b.adjust(1)
     return b.as_markup()
+
+
+def cases_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for key, c_info in CASES.items():
+        b.button(text=f"{c_info['emoji']} {c_info['name']} — {c_info['price']} 🪙", callback_data=f"case_open:{key}")
+    b.button(text="🪙 Монеты / Вывод", callback_data="cshop")
+    b.button(text="🏠 Меню", callback_data="menu")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def coin_exchange_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="💵 50 🪙 ➔ $150,000 кэша", callback_data="c_ex:50")
+    b.button(text="💰 120 🪙 ➔ $400,000 кэша", callback_data="c_ex:120")
+    b.button(text="💎 400 🪙 ➔ $1,500,000 кэша", callback_data="c_ex:400")
+    b.button(text="◀️ Назад в магазин", callback_data="cshop")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def withdraw_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="◀️ Назад в магазин", callback_data="cshop"), Btn(text="🏠 Меню", callback_data="menu")]
+    ])
 

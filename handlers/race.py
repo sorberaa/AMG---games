@@ -13,6 +13,31 @@ router = Router(name="race")
 MAX_BET = 1_000_000
 
 
+async def team_only_redirect(event, is_callback: bool = False):
+    bot_info = await event.bot.get_me()
+    from aiogram.types import InlineKeyboardButton as Btn, InlineKeyboardMarkup
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="➕ Добавить бота в группу / команду", url=f"https://t.me/{bot_info.username}?startgroup=true")],
+        [Btn(text="🏠 Главное меню", callback_data="menu")],
+    ])
+    gif_tag = f"<a href='{data.AMG_GIFS['race']}'>&#8205;</a>"
+    text = (
+        f"{gif_tag}👥 <b>ВСЕ ГОНКИ И ЗАЕЗДЫ ПРОВОДЯТСЯ В КОМАНДЕ!</b>\n\n"
+        "⚡ <b>В личке с ботом ты:</b>\n"
+        "• 🚗 Настраиваешь, тюнингуешь и красишь болиды (/garage, /tuning)\n"
+        "• 🧰 Открываешь сундуки и кейсы AMG (/cases)\n"
+        "• 🪙 Управляешь монетами и выводишь их (/cshop, /withdraw)\n"
+        "• 🎁 Забираешь ежедневные подарки (/daily)\n"
+        "• 👤 Смотришь профиль и статистику (/profile)\n\n"
+        "🏁 <b>Все игры проводятся в команде!</b>\n"
+        "Добавь бота в свою группу или командный чат, чтобы устраивать заезды, соревноваться в дуэлях со ставками и крушить боссов вместе с друзьями! 👇"
+    )
+    if is_callback:
+        await safe_edit(event, text, kb)
+    else:
+        await event.answer(text, reply_markup=kb)
+
+
 async def race_menu_text(uid: int) -> str:
     energy = await db.regen_energy(uid)
     p = await db.get_player(uid)
@@ -27,18 +52,24 @@ async def race_menu_text(uid: int) -> str:
 
 @router.message(Command("race"))
 async def cmd_race(message: Message):
+    if message.chat.type == "private":
+        return await team_only_redirect(message, is_callback=False)
     await send_menu(message, message.from_user.id, await race_menu_text(message.from_user.id), race_menu_kb())
 
 
 @router.callback_query(F.data == "race")
 async def cb_race(cb: CallbackQuery):
     await cb.answer()
+    if cb.message.chat.type == "private":
+        return await team_only_redirect(cb, is_callback=True)
     await safe_edit(cb, await race_menu_text(cb.from_user.id), race_menu_kb())
 
 
 @router.callback_query(F.data == "race_street")
 async def cb_street(cb: CallbackQuery):
     await cb.answer()
+    if cb.message.chat.type == "private":
+        return await team_only_redirect(cb, is_callback=True)
     uid = cb.from_user.id
     p = await db.get_player(uid)
     defeated = p.get("defeated_opponents", 0)
@@ -80,6 +111,9 @@ async def apply_result(uid: int, car_id: int, won: bool, race_type: str, mult: f
 
 @router.callback_query(F.data.startswith("race_street:"))
 async def cb_street_race(cb: CallbackQuery):
+    if cb.message.chat.type == "private":
+        await cb.answer()
+        return await team_only_redirect(cb, is_callback=True)
     uid = cb.from_user.id
     opp_idx = int(cb.data.split(":")[1])
     try:
@@ -172,6 +206,8 @@ async def cb_street_race(cb: CallbackQuery):
 @router.callback_query(F.data == "race_pvp")
 async def cb_pvp(cb: CallbackQuery, player: dict):
     await cb.answer()
+    if cb.message.chat.type == "private":
+        return await team_only_redirect(cb, is_callback=True)
     await safe_edit(cb, f"⚔️ <b>Создать вызов</b>\n\n💰 Баланс: ${fmt(player['money'])}\n\n"
                         "Выбери ставку. Она замораживается, победитель забирает банк.\n"
                         "Вызов появится в этом чате — принять может любой.", pvp_bet_kb())
@@ -229,6 +265,9 @@ async def create_challenge(message: Message, user, bet: int, bet_type: str = "mo
 
 @router.callback_query(F.data.startswith("race_coin_bet:"))
 async def cb_coin_bet(cb: CallbackQuery):
+    if cb.message.chat.type == "private":
+        await cb.answer()
+        return await team_only_redirect(cb, is_callback=True)
     try:
         bet = int(cb.data.split(":")[1])
     except ValueError:
@@ -242,6 +281,9 @@ async def cb_coin_bet(cb: CallbackQuery):
 
 @router.callback_query(F.data.startswith("race_pvp_bet:"))
 async def cb_pvp_bet(cb: CallbackQuery):
+    if cb.message.chat.type == "private":
+        await cb.answer()
+        return await team_only_redirect(cb, is_callback=True)
     try:
         bet = int(cb.data.split(":")[1])
     except ValueError:
@@ -255,6 +297,8 @@ async def cb_pvp_bet(cb: CallbackQuery):
 
 @router.message(Command("duel"))
 async def cmd_duel(message: Message, command: CommandObject):
+    if message.chat.type == "private":
+        return await team_only_redirect(message, is_callback=False)
     bet = 0
     bet_type = "money"
     if command.args:
@@ -273,6 +317,8 @@ async def cmd_duel(message: Message, command: CommandObject):
 @router.callback_query(F.data == "race_pvp_list")
 async def cb_pvp_list(cb: CallbackQuery):
     await cb.answer()
+    if cb.message.chat.type == "private":
+        return await team_only_redirect(cb, is_callback=True)
     races = await db.get_pending_races(cb.from_user.id)
     text = "📋 <b>Открытые вызовы</b>\n\n" + ("Выбери, чей вызов принять:" if races else "Пока никто не бросил вызов 😴")
     await safe_edit(cb, text, pvp_list_kb(races))
