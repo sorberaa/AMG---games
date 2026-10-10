@@ -11,12 +11,15 @@ from utils import award_achievements, safe_edit, send_menu
 router = Router(name="garage")
 
 
+import data
+
 async def garage_view(user_id: int, page: int = 0):
     p = await db.get_player(user_id)
     cars = await db.get_player_cars(user_id)
     sel = next((c for c in cars if c["id"] == p["selected_car_id"]), None)
     sel_name = CAR_CATALOG[sel["car_key"]]["name"] if sel else "не выбрана"
-    text = f"🚗 <b>Твой гараж</b> ({len(cars)} авто)\n\nОсновная: <b>{sel_name}</b>\n\nНажми на машину:"
+    gif_tag = f"<a href='{data.AMG_GIFS['garage']}'>&#8205;</a>"
+    text = f"{gif_tag}🚗 <b>Твой гараж</b> ({len(cars)} авто)\n\nОсновная: <b>{sel_name}</b>\n\nНажми на машину:"
     return text, garage_kb(cars, p["selected_car_id"], page)
 
 

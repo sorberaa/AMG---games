@@ -108,7 +108,7 @@ PLAYER_COLUMNS = {
     "reputation", "wins", "losses", "races_total", "pvp_wins", "daily_streak", "last_daily",
     "selected_car_id", "energy", "max_energy", "last_energy_update", "is_admin", "is_banned",
     "has_insurance", "last_coin_duel", "chat_nitro_until", "gold_wrap", "defeated_opponents",
-    "easy_races_today", "easy_races_date"
+    "easy_races_today", "easy_races_date", "last_wheel_spin", "last_adventure"
 }
 
 
@@ -135,11 +135,18 @@ async def init_db() -> None:
             ("defeated_opponents", "INTEGER DEFAULT 0"),
             ("easy_races_today", "INTEGER DEFAULT 0"),
             ("easy_races_date", "TEXT DEFAULT NULL"),
+            ("last_wheel_spin", "TEXT DEFAULT NULL"),
+            ("last_adventure", "TEXT DEFAULT NULL"),
         ]:
             try:
                 await db.execute(f"ALTER TABLE players ADD COLUMN {col} {typ}")
             except Exception:
                 pass
+
+        try:
+            await db.execute("ALTER TABLE bosses ADD COLUMN rage_phase INTEGER DEFAULT 0")
+        except Exception:
+            pass
 
 
         try:

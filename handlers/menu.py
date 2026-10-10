@@ -2,6 +2,7 @@ from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, Message
 
+import data
 from data import fmt
 from kb import main_menu_kb
 from utils import safe_edit, send_menu
@@ -10,8 +11,9 @@ router = Router(name="menu")
 
 
 def menu_text(p: dict) -> str:
+    gif_tag = f"<a href='{data.AMG_GIFS['welcome']}'>&#8205;</a>"
     return (
-        "🏎 <b>AMG RACING</b>\n\n"
+        f"{gif_tag}🏎 <b>AMG RACING</b>\n\n"
         f"👤 {p['first_name']} · ур. <b>{p['level']}</b>\n"
         f"💰 ${fmt(p['money'])} · 🪙 {fmt(p['coins'])} · ⚡ {p['energy']}/{p['max_energy']}\n\n"
         "Выбери раздел:"
@@ -19,16 +21,19 @@ def menu_text(p: dict) -> str:
 
 
 WELCOME = (
+    f"<a href='{data.AMG_GIFS['welcome']}'>&#8205;</a>"
     "🏎 <b>AMG RACING</b> 🏎\n\n"
     "Добро пожаловать в мир уличных гонок Mercedes-AMG!\n\n"
     "🚗 Собирай коллекцию из 21 AMG — от C180 до AMG ONE\n"
     "🔧 Прокачивай мотор, турбину, нитро и ещё 4 узла\n"
-    "🏁 Гоняй против уличных легенд\n"
+    "🏁 Гоняй против уличных легенд и рейдовых боссов\n"
     "⚔️ Вызывай друзей на дуэли со ставками прямо в чате\n"
+    "🎰 Крути Колесо Фортуны и участвуй в ночных похождениях\n"
     "🪙 Копи монеты на кейсы и бусты\n\n"
     "💰 Стартовый капитал: <b>$50 000</b>\n"
     "🚗 Первая машина: <b>Mercedes C180</b>"
 )
+
 
 HELP = (
     "❓ <b>Как играть</b>\n\n"

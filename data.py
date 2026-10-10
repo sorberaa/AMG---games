@@ -121,14 +121,153 @@ COIN_SHOP = {
     "gold_wrap":     {"name": "✨ Золотой винил", "price": 250, "desc": "+15% к авторитету и наградам в чате"},
 }
 
-# AMG GIFs (прямые проверенные ссылки)
+# AMG GIFs (проверенные прямые ссылки Giphy)
 AMG_GIFS = {
-    "welcome": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbnE5OXQ4NG83eHBjOGp4eTBxeTJtcjY4d2N3eDV5OGx0dWVwMGhpMSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xUOrwihVn9p8HhU3iU/giphy.gif",
-    "win": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcWc1bWpmdTZhNHl0ZjlueHkyM2sydWF5cDFoNWpwbzJwdGFscWRvOSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKMt1VVNkHV2PaE/giphy.gif",
-    "crash": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbnN0YWFqNWJ4MW83eHNhaXN0bWgyOW05Mzd6bTZxb21xNWg4aG4yZCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/26n6WywStCAfdHUM8/giphy.gif",
-    "boss": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHIybTJqd3psb25nOXpsNmx6Y2psZjIwbWtwbnF3anoxMmE4eGNtNiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/l41JGlWa1xOjJSsV2/giphy.gif",
-    "race": "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMWNvZGJocXh1ZDV4YmEydm5xM3NlNGF2cjB2cnBvaGlkbm5tNmMxZCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/MDJ9IbxxvDUQM/giphy.gif"
+    "welcome": "https://media.giphy.com/media/xUOrwihVn9p8HhU3iU/giphy.gif",
+    "win": "https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif",
+    "crash": "https://media.giphy.com/media/26n6WywStCAfdHUM8/giphy.gif",
+    "boss": "https://media.giphy.com/media/l41JGlWa1xOjJSsV2/giphy.gif",
+    "boss_rage": "https://media.giphy.com/media/l4pTfSeH65zpQW7yo/giphy.gif",
+    "race": "https://media.giphy.com/media/MDJ9IbxxvDUQM/giphy.gif",
+    "burnout": "https://media.giphy.com/media/3o7TKsWZBdg99GS956/giphy.gif",
+    "drift": "https://media.giphy.com/media/l0HlHJGHe3yAMhdQY/giphy.gif",
+    "garage": "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif",
+    "heist": "https://media.giphy.com/media/3ohhwkIX215Zg8k59u/giphy.gif",
+    "wheel": "https://media.giphy.com/media/26AHONQ79FdWZhAI0/giphy.gif",
+    "drag": "https://media.giphy.com/media/3o7TKUM3IgJBX2as9O/giphy.gif",
+    "police": "https://media.giphy.com/media/ryMHjDHZtfKoggE436/giphy.gif",
+    "autobahn": "https://media.giphy.com/media/d8isjk1UBP755nnld4/giphy.gif",
 }
+
+# Расширенный ростер Рейдовых Боссов чата
+BOSS_ROSTER = [
+    {
+        "id": "brabus_g63",
+        "name": "Барон на броне-Гелике Brabus 900",
+        "car_key": "g63",
+        "hp": 4500,
+        "ability": "🛡 Бронебойный таран и дымовая завеса",
+        "phrase": "«Мой V8 перемелет ваши легковушки в щебень!»",
+        "coins_pool": 250,
+        "money_pool": 100000,
+        "loot": "📦 Элитный кейс запчастей"
+    },
+    {
+        "id": "amg_one_ghost",
+        "name": "Призрак Нордшляйфе на AMG ONE",
+        "car_key": "amg_one",
+        "hp": 6500,
+        "ability": "⚡ Аэродинамический срыв F1 и уворот от тарана",
+        "phrase": "«1063 лошадиные силы не оставляют вам и шанса!»",
+        "coins_pool": 400,
+        "money_pool": 250000,
+        "loot": "👑 Королевский трофей AMG ONE"
+    },
+    {
+        "id": "devil_gt_bs",
+        "name": "Ночной Дьявол на GT Black Series",
+        "car_key": "gt_bs",
+        "hp": 5500,
+        "ability": "🔥 Выброс пламени из выхлопа и ярость V8",
+        "phrase": "«Посмотрим, чей битурбо сгорит первым в этой ночи!»",
+        "coins_pool": 320,
+        "money_pool": 180000,
+        "loot": "🎁 Кейс тюнинга и нитро"
+    },
+    {
+        "id": "syndicate_gt63s",
+        "name": "Глава синдиката на GT 63 S E-Performance",
+        "car_key": "gt63se",
+        "hp": 5000,
+        "ability": "🔋 Электро-импульс 843 л.с. и регенерация бампера",
+        "phrase": "«Гибридная мощь сотрёт вас с автобана!»",
+        "coins_pool": 280,
+        "money_pool": 140000,
+        "loot": "⚡ Запас супер-энергии"
+    }
+]
+
+# Колесо Фортуны AMG (призы и вероятности)
+WHEEL_PRIZES = [
+    {"type": "money", "val": 15000, "text": "💵 $15,000 наличных", "weight": 25},
+    {"type": "money", "val": 50000, "text": "💵 Крупный куш: $50,000!", "weight": 12},
+    {"type": "coins", "val": 30, "text": "🪙 30 золотых монет AMG", "weight": 20},
+    {"type": "coins", "val": 100, "text": "🪙 ДЖЕКПОТ: 100 золотых монет!", "weight": 5},
+    {"type": "energy", "val": 5, "text": "⚡ +5 единиц энергии", "weight": 18},
+    {"type": "xp", "val": 400, "text": "📈 +400 очков опыта гонщика", "weight": 15},
+    {"type": "fine", "val": 3000, "text": "👮 Штраф ДПС за тонировку (-$3,000) 😅", "weight": 5},
+]
+
+# Сценарии приключений и похождений по автобану
+ADVENTURE_SCENARIOS = [
+    {
+        "title": "Нелегальная сходка на подземном паркинге",
+        "desc": "Вы въезжаете на закрытую подземную парковку в деловом квартале. Густой дым от резины, вокруг ревут V8 Biturbo, толпа стритрейсеров окружила заряженный C63.",
+        "choices": [
+            {
+                "id": "dyno",
+                "text": "📊 Заехать на диностенд и показать мощь",
+                "req_stat": "power",
+                "success_text": "Диностенд выдал запредельные показатели! Толпа в восторге, вам скинулись на призовой фонд!",
+                "win_money": 25000, "win_coins": 20, "win_xp": 150
+            },
+            {
+                "id": "drag402",
+                "text": "🚦 Принять вызов на быстрый спринт по рампе",
+                "req_stat": "acceleration",
+                "success_text": "Чистый старт на лаунч-контроле! Вы улетели вперёд, оставив соперника глотать пыль!",
+                "win_money": 35000, "win_coins": 25, "win_xp": 200
+            },
+            {
+                "id": "mechanic",
+                "text": "🔧 Подойти к подпольному механику AMG",
+                "req_stat": "any",
+                "success_text": "Механик уважительно оценил ваше авто и бесплатно подкрутил прошивку ECU!",
+                "win_money": 10000, "win_coins": 15, "win_xp": 250
+            }
+        ]
+    },
+    {
+        "title": "Ночной автобан A2 без ограничений",
+        "desc": "Стрелка спидометра перевалила за 250 км/ч. В зеркале заднего вида внезапно вспыхивают матричные фары — вас догоняет колонна черных суперкаров!",
+        "choices": [
+            {
+                "id": "flatout",
+                "text": "💨 Педаль в пол: проверить максималку",
+                "req_stat": "speed",
+                "success_text": "Ваш AMG показал свой максимум! Колонна осталась далеко позади, вы король трассы!",
+                "win_money": 40000, "win_coins": 30, "win_xp": 220
+            },
+            {
+                "id": "corners",
+                "text": "↩️ Свернуть на извилистую развязку",
+                "req_stat": "handling",
+                "success_text": "Филигранное прохождение шпилек! Шасси отработало идеально, вам начислили очки стиля!",
+                "win_money": 30000, "win_coins": 20, "win_xp": 180
+            }
+        ]
+    },
+    {
+        "title": "Полицейская засада и облава",
+        "desc": "На съезде с моста включились сирены! Перехватчики дорожной полиции на броневиках блокируют полосы!",
+        "choices": [
+            {
+                "id": "escape_tunnel",
+                "text": "🚇 Срезать через ремонтный тоннель",
+                "req_stat": "handling",
+                "success_text": "Вы пролетели в сантиметрах от отбойников и оторвались в темноте тоннеля!",
+                "win_money": 45000, "win_coins": 35, "win_xp": 300
+            },
+            {
+                "id": "nitro_blast",
+                "text": "🔥 Врубить полный баллон нитро!",
+                "req_stat": "power",
+                "success_text": "Взрыв ускорения вжал вас в сиденье! Радары копов просто зашкалили!",
+                "win_money": 50000, "win_coins": 40, "win_xp": 280
+            }
+        ]
+    }
+]
 
 CASE_DROPS = {
     "case_basic": [  # (вес, тип, значение)

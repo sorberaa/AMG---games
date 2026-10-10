@@ -123,8 +123,37 @@ def pvp_bet_kb() -> InlineKeyboardMarkup:
 
 def boss_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [Btn(text="💥 ТАРАНИТЬ / ОБГОН (-1 ⚡)", callback_data="boss:hit")],
-        [Btn(text="📊 Топ по урону", callback_data="boss:stats")],
+        [Btn(text="💥 ТАРАНИТЬ (-1 ⚡)", callback_data="boss:hit"),
+         Btn(text="🔥 НИТРО-УДАР x2.5 (-2 ⚡)", callback_data="boss:nitro")],
+        [Btn(text="📊 Статистика урона", callback_data="boss:stats"),
+         Btn(text="🔄 Обновить HP", callback_data="boss:refresh")],
+    ])
+
+
+def wheel_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="🎰 КРУТИТЬ РУЛЕТКУ (1 раз в сутки)", callback_data="wheel:spin")],
+        [Btn(text="🏠 Главное меню", callback_data="menu")],
+    ])
+
+
+def adventure_choice_kb(scenario_idx: int, choices: list) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for ch_idx, ch in enumerate(choices):
+        b.button(text=ch["text"], callback_data=f"adv:choice:{scenario_idx}:{ch_idx}")
+    b.adjust(1)
+    return b.as_markup()
+
+
+def drag_ready_kb(drag_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="🚦 ВСТАТЬ НА СТАРТ 402м", callback_data=f"drag:join:{drag_id}")],
+    ])
+
+
+def drag_launch_kb(drag_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="🟢 ГАЗ В ПОЛ! СТАРТ! 🟢", callback_data=f"drag:launch:{drag_id}")],
     ])
 
 
