@@ -107,8 +107,9 @@ def buy_confirm_kb(car_key: str, cls: str, can_buy: bool) -> InlineKeyboardMarku
 
 def race_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [Btn(text="🏎 Уличная гонка", callback_data="race_street")],
-        [Btn(text="⚔️ Создать вызов", callback_data="race_pvp")],
+        [Btn(text="🏎 Уличная гонка (лестница)", callback_data="race_street")],
+        [Btn(text="🏆 Гран-при чата (заезд участников)", callback_data="tourn:create")],
+        [Btn(text="⚔️ Создать вызов 1х1", callback_data="race_pvp")],
         [Btn(text="📋 Открытые вызовы", callback_data="race_pvp_list")],
         [Btn(text="🏠 Меню", callback_data="menu")],
     ])
@@ -194,10 +195,15 @@ def pvp_list_kb(races: list) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def race_result_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [Btn(text="🔄 Ещё гонка", callback_data="race_street"), Btn(text="🏠 Меню", callback_data="menu")],
+def race_result_kb(opp_idx: int = None) -> InlineKeyboardMarkup:
+    rows = []
+    if opp_idx is not None:
+        rows.append([Btn(text="🔄 Реванш (повторить заезд)", callback_data=f"race_street:{opp_idx}")])
+    rows.append([
+        Btn(text="🏎 Другой соперник", callback_data="race_street"),
+        Btn(text="🏠 Меню", callback_data="menu")
     ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def tuning_kb(player_car: dict, money: int) -> InlineKeyboardMarkup:

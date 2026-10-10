@@ -14,8 +14,12 @@ from engine import check_achievements
 MENU_OWNERS: dict = {}
 _admin_cache: set = set()
 
-# Кнопки, которые может нажимать любой участник чата
-PUBLIC_CALLBACKS = ("race_accept:", "race_cancel:")
+# Кнопки, которые может нажимать любой участник чата в группе
+PUBLIC_CALLBACKS = (
+    "race_accept:", "race_cancel:", "race_street:", "race_street",
+    "tourn:", "boss:", "chase:", "drop:", "royale:", "drag:",
+    "quiz:", "adv:", "wheel:", "race_pvp", "race_coin_bet:", "race_pvp_bet:"
+)
 
 
 def is_admin(user_id: int) -> bool:

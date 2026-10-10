@@ -212,19 +212,14 @@ async def cb_boss_stats(cb: CallbackQuery):
 
 
 
-# ── Групповой Турнир / Гран-при чата (/tournament) ───────────
+# ── Групповой Турнир / Гран-при чата (/tournament, /grouprace) ───────────
 
 TOURNAMENTS: dict = {}  # chat_id -> {status, participants: [user_id], names: {uid: name}, cars: {uid: pc}}
 
 
-@router.message(Command("tournament"))
-async def cmd_tournament(message: Message):
-    if message.chat.type == "private":
-        return await message.answer("🏁 Турнир доступен только в группах! Добавь бота в чат и пиши /tournament")
-
-    chat_id = message.chat.id
+async def start_tournament_recruitment(chat_id: int, organizer_name: str, send_fn):
     if chat_id in TOURNAMENTS and TOURNAMENTS[chat_id]["status"] == "recruiting":
-        return await message.answer("⚠️ Регистрация на турнир уже открыта! Жми кнопку ниже.")
+        return await send_fn("⚠️ Регистрация на Гран-при чата уже открыта! Жми кнопку ниже.")
 
     TOURNAMENTS[chat_id] = {
         "status": "recruiting",
@@ -240,14 +235,30 @@ async def cmd_tournament(message: Message):
     ])
 
     gif_tag = f"<a href='{data.AMG_GIFS['race']}'>&#8205;</a>"
-    await message.answer(
+    await send_fn(
         f"{gif_tag}🏆 <b>ГРАН-ПРИ ЧАТА ОБЪЯВЛЕН!</b>\n\n"
-        f"Организатор: <b>{message.from_user.first_name}</b>\n\n"
+        f"Организатор: <b>{organizer_name}</b>\n\n"
         "Нажмите кнопку <b>«Участвовать»</b>, чтобы занять место на стартовой решетке.\n"
-        "Победитель забирает банк очков и признание всего чата!\n\n"
+        "Каждый участник получает свой уникальный гоночный цвет 🟠🟡🟢🔵🟣🔴⚫️⚪️!\n"
+        "Победители забирают кубки, монеты 🪙 и славу всего чата!\n\n"
         "Участников: <b>0</b>",
         reply_markup=kb
     )
+
+
+@router.message(Command("tournament", "grouprace"))
+async def cmd_tournament(message: Message):
+    if message.chat.type == "private":
+        return await message.answer("🏁 Гран-при и групповые заезды доступны только в группах! Добавь бота в чат и пиши /grouprace или /tournament")
+    await start_tournament_recruitment(message.chat.id, message.from_user.first_name, message.answer)
+
+
+@router.callback_query(F.data == "tourn:create")
+async def cb_tourn_create(cb: CallbackQuery):
+    await cb.answer()
+    if cb.message.chat.type == "private":
+        return await cb.message.answer("🏁 Заезды команд проводятся в группах! Добавь бота в свой чат.")
+    await start_tournament_recruitment(cb.message.chat.id, cb.from_user.first_name, cb.message.answer)
 
 
 @router.callback_query(F.data == "tourn:join")
@@ -305,7 +316,7 @@ async def cb_tourn_start(cb: CallbackQuery):
     await cb.answer("🏁 Турнир стартует!")
 
     import asyncio
-    status_msg = await cb.message.edit_text("🚦 <b>3... 2... 1... СТАРТ ГРАН-ПРИ!</b>\nМашины сорвались со старта!")
+    status_msg = await cb.message.edit_text("🚦 <b>3... 2... 1... ЗЕЛЕНЫЙ СВЕТ! СТАРТ ГРАН-ПРИ!</b>\nПелотон срывается с решетки в облаке дыма!")
     await asyncio.sleep(1.5)
 
     # Назначаем уникальные цвета участникам (приоритет - цвет покраски машины)
@@ -321,50 +332,131 @@ async def cb_tourn_start(cb: CallbackQuery):
         used_colors.add(c_emoji)
         participant_colors[uid] = c_emoji
 
-    # Симулируем заезд каждого с учетом рейтинга и рандома
-    scores = []
+    # Этап 1: Старт и первый сектор
+    s1_scores = {}
     for uid in t["participants"]:
         pc = t["cars"][uid]
         car = CAR_CATALOG[pc["car_key"]]
         st = calc_stats(car, car_upgrades(pc))
-        score = st["rating"] * random.uniform(0.85, 1.25)
-        scores.append((score, uid, t["names"][uid], car["name"]))
+        # Ускорение решает на старте
+        accel_score = (15 - st["acceleration"]) * 20 * random.uniform(0.85, 1.25) + st["power"] * 0.1
+        s1_scores[uid] = accel_score
 
-    scores.sort(key=lambda x: x[0], reverse=True)
+    order_s1 = sorted(t["participants"], key=lambda u: s1_scores[u], reverse=True)
+    leader_s1 = order_s1[0]
+    lead_s1_col = participant_colors[leader_s1]
+    lead_s1_name = t["names"][leader_s1]
 
-    # Выдаем награды топ-3
+    s1_grid = "\n".join(
+        f"{i+1}. {participant_colors[u]} <b>{t['names'][u]}</b> ({CAR_CATALOG[t['cars'][u]['car_key']]['name']})"
+        for i, u in enumerate(order_s1)
+    )
+
+    try:
+        gif_tag = f"<a href='{data.AMG_GIFS['race']}'>&#8205;</a>"
+        await status_msg.edit_text(
+            f"{gif_tag}🚦 <b>ЭТАП 1: РАЗГОН И ПЕРВЫЙ СЕКТОР!</b>\n\n"
+            f"⚡ Вперед вырывается: {lead_s1_col} <b>{lead_s1_name}</b>!\n\n"
+            f"<b>Позиции в пелотоне:</b>\n{s1_grid}\n\n"
+            "<i>Машины приближаются к связке скоростных поворотов...</i>"
+        )
+    except Exception:
+        pass
+
+    await asyncio.sleep(2.5)
+
+    # Этап 2: Поворот и борьба
+    s2_scores = {}
+    for uid in t["participants"]:
+        pc = t["cars"][uid]
+        car = CAR_CATALOG[pc["car_key"]]
+        st = calc_stats(car, car_upgrades(pc))
+        turn_score = (st["handling"] * 1.5 + (3000 - st["weight"]) * 0.05) * random.uniform(0.85, 1.25)
+        s2_scores[uid] = s1_scores[uid] + turn_score
+
+    order_s2 = sorted(t["participants"], key=lambda u: s2_scores[u], reverse=True)
+    leader_s2 = order_s2[0]
+    lead_s2_col = participant_colors[leader_s2]
+    lead_s2_name = t["names"][leader_s2]
+
+    overtake_comment = (
+        f"🔥 <b>СЕНСАЦИОННЫЙ ОБГОН!</b> {lead_s2_col} <b>{lead_s2_name}</b> режет апекс и вырывается на 1-е место!"
+        if leader_s2 != leader_s1
+        else f"🛡 {lead_s2_col} <b>{lead_s2_name}</b> мастерски держит траекторию и блокирует атаки соперников!"
+    )
+
+    s2_grid = "\n".join(
+        f"{i+1}. {participant_colors[u]} <b>{t['names'][u]}</b>"
+        for i, u in enumerate(order_s2)
+    )
+
+    try:
+        gif_tag = f"<a href='{data.AMG_GIFS['drift']}'>&#8205;</a>"
+        await status_msg.edit_text(
+            f"{gif_tag}↩️ <b>ЭТАП 2: ШПИЛЬКА «КАРУСЕЛЬ» В ЗАНОСЕ!</b>\n\n"
+            f"{overtake_comment}\n\n"
+            f"<b>Позиции перед финишной прямой:</b>\n{s2_grid}\n\n"
+            "<i>Педаль в пол на выходе! Впереди клетчатый флаг!</i>"
+        )
+    except Exception:
+        pass
+
+    await asyncio.sleep(2.5)
+
+    # Финал: Максималка и спринт к финишу
+    final_scores = []
+    for uid in t["participants"]:
+        pc = t["cars"][uid]
+        car = CAR_CATALOG[pc["car_key"]]
+        st = calc_stats(car, car_upgrades(pc))
+        sprint_score = (st["speed"] * 0.8 + st["power"] * 0.4) * random.uniform(0.85, 1.25)
+        total = s2_scores[uid] + sprint_score
+        final_scores.append((total, uid, t["names"][uid], car["name"]))
+
+    final_scores.sort(key=lambda x: x[0], reverse=True)
+
+    # Выдаем щедрые награды
     medals = ["🥇", "🥈", "🥉"]
     res_lines = []
-    for i, (_, uid, name, car_name) in enumerate(scores):
+    for i, (_, uid, name, car_name) in enumerate(final_scores):
         m = medals[i] if i < 3 else f"{i + 1}."
         col = participant_colors.get(uid, "🏎")
-        reward_txt = ""
         if i == 0:
             await db.add_coins_admin(uid, 40, reason="1 место в Гран-при чата")
-            await db.add_money(uid, 25000)
-            await db.add_xp(uid, 300)
-            reward_txt = " (+40 🪙, +$25k, +300 XP)"
+            await db.add_money(uid, 35000)
+            await db.add_xp(uid, 350)
+            reward_txt = " (+40 🪙, +$35k, +350 XP)"
         elif i == 1:
             await db.add_coins_admin(uid, 20, reason="2 место в Гран-при чата")
-            await db.add_money(uid, 12000)
-            await db.add_xp(uid, 150)
-            reward_txt = " (+20 🪙, +$12k, +150 XP)"
+            await db.add_money(uid, 18000)
+            await db.add_xp(uid, 200)
+            reward_txt = " (+20 🪙, +$18k, +200 XP)"
         elif i == 2:
             await db.add_coins_admin(uid, 10, reason="3 место в Гран-при чата")
-            await db.add_money(uid, 6000)
-            await db.add_xp(uid, 80)
-            reward_txt = " (+10 🪙, +$6k, +80 XP)"
+            await db.add_money(uid, 10000)
+            await db.add_xp(uid, 100)
+            reward_txt = " (+10 🪙, +$10k, +100 XP)"
+        else:
+            await db.add_coins_admin(uid, 3, reason="Участие в Гран-при")
+            await db.add_money(uid, 3000)
+            await db.add_xp(uid, 40)
+            reward_txt = " (+3 🪙, +$3k, +40 XP)"
+
         res_lines.append(f"{m} {col} <b>{name}</b> ({car_name}){reward_txt}")
 
-    winner_uid = scores[0][1]
-    winner_name = scores[0][2]
+    winner_uid = final_scores[0][1]
+    winner_name = final_scores[0][2]
     win_col = participant_colors.get(winner_uid, "🏎")
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
-    await status_msg.edit_text(
-        f"{gif_tag}🏁 <b>ФИНИШ ГРАН-ПРИ ЧАТА!</b>\n\n"
-        f"🏆 Чемпион заезда: {win_col} <b>{winner_name}</b>!\n\n"
-        f"📋 <b>Итоговая таблица:</b>\n" + "\n".join(res_lines)
-    )
+    try:
+        await status_msg.edit_text(
+            f"{gif_tag}🏁 <b>ФИНИШ ГРАН-ПРИ ЧАТА!</b>\n\n"
+            f"🏆 Абсолютный чемпион: {win_col} <b>{winner_name}</b>!\n\n"
+            f"📋 <b>Итоговый протокол заезда:</b>\n" + "\n".join(res_lines) +
+            "\n\n<i>Запустить следующий заезд: /grouprace или /tournament</i>"
+        )
+    except Exception:
+        pass
     TOURNAMENTS.pop(chat_id, None)
 
 

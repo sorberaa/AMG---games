@@ -126,15 +126,6 @@ async def cb_street_race(cb: CallbackQuery):
     if opp_idx > defeated:
         return await cb.answer("🔒 Сначала победи предыдущего соперника!", show_alert=True)
 
-    # Лимит 5 гонок в день против слабых соперников (easy)
-    from datetime import datetime
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    is_easy = opp["difficulty"] == "easy"
-    easy_count = p.get("easy_races_today", 0) if p.get("easy_races_date") == today else 0
-
-    if is_easy and easy_count >= 5:
-        return await cb.answer("⚠️ Лимит 5 заездов в день против слабых соперников исчерпан! Бросай вызов более сильным гонщикам — они без лимита!", show_alert=True)
-
     pc = await db.get_selected_car(uid)
     if not pc:
         return await cb.answer("Сначала выбери машину в гараже!", show_alert=True)
@@ -163,38 +154,48 @@ async def cb_street_race(cb: CallbackQuery):
         await db.update_player(uid, has_insurance=0)
     won = res["winner"] == 1
 
-    # Учитываем легкий заезд в счетчике лимита
-    if is_easy:
-        new_cnt = 1 if p.get("easy_races_date") != today else easy_count + 1
-        await db.update_player(uid, easy_races_today=new_cnt, easy_races_date=today)
-
-    # Если победил текущего максимального босса — открываем следующего!
-    if won and opp_idx == defeated:
-        await db.update_player(uid, defeated_opponents=defeated + 1)
+    # Если победил соперника — навсегда открываем следующего по лестнице
+    if won:
+        new_defeated = max(defeated, opp_idx + 1)
+        if new_defeated > defeated:
+            await db.update_player(uid, defeated_opponents=new_defeated)
 
     rewards = await apply_result(uid, pc["id"], won, "street", opp["bonus_mult"], car_rating=my_stats["rating"])
     extra = {"ghost_slayer"} if won and opp["difficulty"] == "extreme" else set()
     ach = await award_achievements(uid, extra)
 
-    # Пошаговая трансляция этапов с задержкой в 1 секунду
+    # Живая динамичная трансляция этапов гонки
     import asyncio
     c1 = res.get("color1", "🏎")
     c2 = res.get("color2", "🏎")
-    head_base = f"🏁 <b>{my_car['name']}</b> vs <b>{opp_car['name']}</b>\n<i>{c1} <b>{me}</b> против {c2} <b>{opp['name']}</b></i>\n\n"
+
     if res.get("round_steps"):
-        cur_text = head_base + (res.get("saved_note") or "")
-        for step in res["round_steps"]:
-            cur_text += f"\n\n{step}"
-            await safe_edit(cb, cur_text)
-            await asyncio.sleep(1.0)
-    else:
-        cur_text = head_base + res["narrative"]
+        for r_num, step in enumerate(res["round_steps"], start=1):
+            stage_view = (
+                f"🏁 <b>{my_car['name']}</b> vs <b>{opp_car['name']}</b>\n"
+                f"<i>{c1} <b>{me}</b> против {c2} <b>{opp['name']}</b></i>\n\n"
+                f"📍 <b>ЭТАП {r_num}/5</b>\n"
+                f"{step}"
+            )
+            await safe_edit(cb, stage_view)
+            await asyncio.sleep(1.2)
 
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>" if won and not res.get("crashed") else (f"<a href='{data.AMG_GIFS['crash']}'>&#8205;</a>" if res.get("crashed") else "")
-    limit_note = f"\n<i>Заездов со слабачками сегодня: {easy_count + 1}/5</i>" if is_easy else ""
     winner_name = f"{c1} <b>{me}</b>" if won else f"{c2} <b>{opp['name']}</b>"
-    result = (f"🏆 ПОБЕДИТЕЛЬ: {winner_name} {res['margin']}" if won else f"💀 ПОБЕДИТЕЛЬ: {winner_name} {res['margin']}\n<i>Прокачай тачку в тюнинге и попробуй снова!</i>")
-    await safe_edit(cb, f"{gif_tag}{cur_text}\n\n━━━━━━━━━━\n{result}\n{rewards}{limit_note}{ach}", race_result_kb())
+    result = (f"🏆 ПОБЕДИТЕЛЬ: {winner_name} {res['margin']}" if won else f"💀 ПОБЕДИТЕЛЬ: {winner_name} {res['margin']}\n<i>Прокачай тачку в тюнинге и отомсти!</i>")
+
+    final_text = (
+        f"{gif_tag}🏁 <b>ФИНИШНАЯ ЧЕРТА!</b>\n\n"
+        f"🏎 <b>{my_car['name']}</b> vs <b>{opp_car['name']}</b>\n"
+        f"<i>{c1} <b>{me}</b> против {c2} <b>{opp['name']}</b></i>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"{res.get('saved_note', '')}"
+        f"{res['narrative']}\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"{result}\n\n"
+        f"{rewards}{ach}"
+    )
+    await safe_edit(cb, final_text, race_result_kb(opp_idx))
 
 
 

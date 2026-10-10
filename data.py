@@ -355,8 +355,8 @@ CASE_DROPS = {
     ],
 }
 
-MAX_ENERGY_CAP = 20
-ENERGY_REGEN_MINUTES = 20
+MAX_ENERGY_CAP = 25
+ENERGY_REGEN_MINUTES = 10
 
 
 def get_cars_by_class(cls: str) -> list:
