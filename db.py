@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS player_cars (
     body_kit_level INTEGER DEFAULT 0,
     total_races INTEGER DEFAULT 0,
     total_wins INTEGER DEFAULT 0,
+    color TEXT DEFAULT NULL,
     purchased_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS races (
@@ -148,6 +149,11 @@ async def init_db() -> None:
         except Exception:
             pass
 
+
+        try:
+            await db.execute("ALTER TABLE player_cars ADD COLUMN color TEXT DEFAULT NULL")
+        except Exception:
+            pass
 
         try:
             await db.execute("ALTER TABLE races ADD COLUMN bet_type TEXT DEFAULT 'money'")
@@ -385,6 +391,13 @@ async def remove_car(car_id: int) -> None:
     async with _connect() as db:
         await db.execute("UPDATE players SET selected_car_id = NULL WHERE selected_car_id = ?", (car_id,))
         await db.execute("DELETE FROM player_cars WHERE id = ?", (car_id,))
+        await db.commit()
+
+
+async def paint_car(car_id: int, color_key: str) -> None:
+    """Устанавливает цвет покраски для автомобиля."""
+    async with _connect() as db:
+        await db.execute("UPDATE player_cars SET color = ? WHERE id = ?", (color_key, car_id))
         await db.commit()
 
 

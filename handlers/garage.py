@@ -3,9 +3,9 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
 import db
-from data import CAR_CATALOG, CAR_CLASS_EMOJIS, UPGRADE_BONUSES, UPGRADE_DEFS, fmt, get_sell_price, get_upgrade_cost
+from data import CAR_CATALOG, CAR_CLASS_EMOJIS, CAR_COLORS, UPGRADE_BONUSES, UPGRADE_DEFS, fmt, get_sell_price, get_upgrade_cost
 from engine import calc_stats, car_upgrades
-from kb import back_kb, car_actions_kb, garage_kb, sell_confirm_kb, tuning_kb, upgrade_confirm_kb
+from kb import back_kb, car_actions_kb, garage_kb, paint_shop_kb, sell_confirm_kb, tuning_kb, upgrade_confirm_kb
 from utils import award_achievements, safe_edit, send_menu
 
 router = Router(name="garage")
@@ -59,9 +59,13 @@ async def car_detail_text(pc: dict) -> str:
     car = CAR_CATALOG[pc["car_key"]]
     st = calc_stats(car, car_upgrades(pc))
     ups = " ".join(f"{u['emoji']}{pc[f'{k}_level']}" for k, u in UPGRADE_DEFS.items())
+    c_key = pc.get("color")
+    c_info = CAR_COLORS.get(c_key) if c_key else None
+    c_str = f"{c_info['emoji']} {c_info['name']}" if c_info else "Заводской (серебристый 🔘)"
     return (
         f"{car['emoji']} <b>{car['name']}</b>\n"
         f"{CAR_CLASS_EMOJIS[car['cls']]} Класс {car['cls']}\n<i>{car['desc']}</i>\n\n"
+        f"🎨 Цвет кузова: <b>{c_str}</b>\n\n"
         f"{stats_block(st)}\n\n🔧 Тюнинг: {ups}\n"
         f"🏁 Гонок: {pc['total_races']} · 🏆 Побед: {pc['total_wins']}"
     )
@@ -123,6 +127,60 @@ async def cb_sell_yes(cb: CallbackQuery):
     await cb.answer(f"Продано за ${fmt(price)}", show_alert=True)
     text, kb = await garage_view(cb.from_user.id)
     await safe_edit(cb, text, kb)
+
+
+# ── Покраска ─────────────────────────────────────────────────
+
+@router.callback_query(F.data.startswith("car_paint:"))
+async def cb_car_paint(cb: CallbackQuery):
+    pc = await own_car(cb, int(cb.data.split(":")[1]))
+    if not pc:
+        return
+    await cb.answer()
+    p = await db.get_player(cb.from_user.id)
+    car = CAR_CATALOG[pc["car_key"]]
+    c_key = pc.get("color")
+    c_info = CAR_COLORS.get(c_key) if c_key else None
+    c_str = f"{c_info['emoji']} {c_info['name']}" if c_info else "Заводской (серебристый 🔘)"
+    gif_tag = f"<a href='{data.AMG_GIFS['garage']}'>&#8205;</a>"
+    text = (
+        f"{gif_tag}🎨 <b>Покрасочный цех AMG Performance Studio</b>\n\n"
+        f"Автомобиль: {car['emoji']} <b>{car['name']}</b>\n"
+        f"Текущий цвет: <b>{c_str}</b>\n"
+        f"💰 Твой баланс: <b>${fmt(p['money'])}</b>\n\n"
+        "Выбери цвет кузова! В гонках бот будет закреплять за тобой именно твой цвет болида:"
+    )
+    await safe_edit(cb, text, paint_shop_kb(pc["id"], c_key))
+
+
+@router.callback_query(F.data.startswith("car_paint_buy:"))
+async def cb_car_paint_buy(cb: CallbackQuery):
+    _, car_id_str, color_key = cb.data.split(":")
+    pc = await own_car(cb, int(car_id_str))
+    if not pc or color_key not in CAR_COLORS:
+        return
+    if pc.get("color") == color_key:
+        return await cb.answer("Этот цвет уже нанесен на машину!", show_alert=True)
+
+    c_info = CAR_COLORS[color_key]
+    price = c_info["price"]
+    if not await db.spend_money(cb.from_user.id, price):
+        return await cb.answer("Недостаточно денег для покраски! 💸", show_alert=True)
+
+    await db.paint_car(pc["id"], color_key)
+    await cb.answer(f"✅ Автомобиль перекрашен в {c_info['name']}!", show_alert=True)
+    updated_pc = await db.get_car(pc["id"])
+    p = await db.get_player(cb.from_user.id)
+    car = CAR_CATALOG[updated_pc["car_key"]]
+    gif_tag = f"<a href='{data.AMG_GIFS['garage']}'>&#8205;</a>"
+    text = (
+        f"{gif_tag}🎨 <b>Покрасочный цех AMG Performance Studio</b>\n\n"
+        f"Автомобиль: {car['emoji']} <b>{car['name']}</b>\n"
+        f"Текущий цвет: <b>{c_info['emoji']} {c_info['name']}</b> ✅\n"
+        f"💰 Твой баланс: <b>${fmt(p['money'])}</b>\n\n"
+        "Выбери цвет кузова! В гонках бот будет закреплять за тобой именно твой цвет болида:"
+    )
+    await safe_edit(cb, text, paint_shop_kb(updated_pc["id"], color_key))
 
 
 # ── Тюнинг ───────────────────────────────────────────────────

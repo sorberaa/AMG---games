@@ -119,9 +119,11 @@ async def cb_street_race(cb: CallbackQuery):
 
     p_ins = bool(p.get("has_insurance"))
     my_stats = calc_stats(my_car, car_upgrades(pc))
+    my_color = pc.get("color")
     res = simulate_race(
         my_stats, calc_stats(opp_car, opp["upgrades"]), me, opp["name"],
-        p1_insured=p_ins, p1_immune=my_immune, p2_immune=opp_immune
+        p1_insured=p_ins, p1_immune=my_immune, p2_immune=opp_immune,
+        p1_color=my_color, p2_color=None
     )
     if res.get("insurance_saved") == 1:
         await db.update_player(uid, has_insurance=0)
@@ -138,9 +140,13 @@ async def cb_street_race(cb: CallbackQuery):
 
     rewards = await apply_result(uid, pc["id"], won, "street", opp["bonus_mult"], car_rating=my_stats["rating"])
     extra = {"ghost_slayer"} if won and opp["difficulty"] == "extreme" else set()
+    ach = await award_achievements(uid, extra)
+
     # Пошаговая трансляция этапов с задержкой в 1 секунду
     import asyncio
-    head_base = f"🏁 <b>{my_car['name']}</b> vs <b>{opp_car['name']}</b>\n<i>{me} против «{opp['name']}»</i>\n\n"
+    c1 = res.get("color1", "🏎")
+    c2 = res.get("color2", "🏎")
+    head_base = f"🏁 <b>{my_car['name']}</b> vs <b>{opp_car['name']}</b>\n<i>{c1} <b>{me}</b> против {c2} <b>{opp['name']}</b></i>\n\n"
     if res.get("round_steps"):
         cur_text = head_base + (res.get("saved_note") or "")
         for step in res["round_steps"]:
@@ -152,7 +158,7 @@ async def cb_street_race(cb: CallbackQuery):
 
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>" if won and not res.get("crashed") else (f"<a href='{data.AMG_GIFS['crash']}'>&#8205;</a>" if res.get("crashed") else "")
     limit_note = f"\n<i>Заездов со слабачками сегодня: {easy_count + 1}/5</i>" if is_easy else ""
-    winner_name = f"<b>{me}</b>" if won else f"<b>{opp['name']}</b>"
+    winner_name = f"{c1} <b>{me}</b>" if won else f"{c2} <b>{opp['name']}</b>"
     result = (f"🏆 ПОБЕДИТЕЛЬ: {winner_name} {res['margin']}" if won else f"💀 ПОБЕДИТЕЛЬ: {winner_name} {res['margin']}\n<i>Прокачай тачку в тюнинге и попробуй снова!</i>")
     await safe_edit(cb, f"{gif_tag}{cur_text}\n\n━━━━━━━━━━\n{result}\n{rewards}{limit_note}{ach}", race_result_kb())
 
@@ -353,7 +359,8 @@ async def cb_pvp_accept(cb: CallbackQuery):
     p2_imm = data.is_weakest_in_tier(pc2["car_key"])
     res = simulate_race(
         calc_stats(c1, car_upgrades(pc1)), calc_stats(c2, car_upgrades(pc2)),
-        n1, n2, p1_insured=p1_ins, p2_insured=p2_ins, p1_immune=p1_imm, p2_immune=p2_imm
+        n1, n2, p1_insured=p1_ins, p2_insured=p2_ins, p1_immune=p1_imm, p2_immune=p2_imm,
+        p1_color=pc1.get("color"), p2_color=pc2.get("color")
     )
 
 
@@ -389,11 +396,13 @@ async def cb_pvp_accept(cb: CallbackQuery):
     l_rew = await apply_result(loser_id, l_car, False, "pvp", car_rating=l_rating)
     ach = await award_achievements(winner_id) + await award_achievements(loser_id)
 
-    wn = f"<b>{n1}</b>" if winner_id == p1["user_id"] else f"<b>{n2}</b>"
-    ln = f"<b>{n2}</b>" if wn == f"<b>{n1}</b>" else f"<b>{n1}</b>"
+    c1_col = res.get("color1", c1["emoji"])
+    c2_col = res.get("color2", c2["emoji"])
+    wn = f"{c1_col} <b>{n1}</b>" if winner_id == p1["user_id"] else f"{c2_col} <b>{n2}</b>"
+    ln = f"{c2_col} <b>{n2}</b>" if wn == f"{c1_col} <b>{n1}</b>" else f"{c1_col} <b>{n1}</b>"
 
     import asyncio
-    head_base = f"⚔️ <b>ДУЭЛЬ</b>\n{c1['emoji']} {n1} ({c1['name']})\n🆚\n{c2['emoji']} {n2} ({c2['name']})\n\n"
+    head_base = f"⚔️ <b>ДУЭЛЬ</b>\n{c1_col} <b>{n1}</b> ({c1['name']})\n🆚\n{c2_col} <b>{n2}</b> ({c2['name']})\n\n"
     if res.get("round_steps"):
         cur_text = head_base + (res.get("saved_note") or "")
         for step in res["round_steps"]:

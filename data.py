@@ -5,6 +5,52 @@ CAR_CLASS_NAMES = {"D": "Начальный", "C": "Любитель", "B": "П�
                    "A": "Эксперт", "S": "Мастер", "SS": "Легенда"}
 CAR_CLASS_EMOJIS = {"D": "🟢", "C": "🔵", "B": "🟡", "A": "🟠", "S": "⭐", "SS": "💎"}
 
+# Палитра фирменных цветов Mercedes-AMG
+CAR_COLORS = {
+    "red":    {"name": "Красный (Designo Cardinal)", "emoji": "🔴", "price": 15000},
+    "yellow": {"name": "Жёлтый (Solarbeam Yellow)",   "emoji": "🟡", "price": 20000},
+    "green":  {"name": "Зелёный (Green Hell Magno)",  "emoji": "🟢", "price": 30000},
+    "blue":   {"name": "Синий (Brilliant Blue)",      "emoji": "🔵", "price": 20000},
+    "purple": {"name": "Фиолетовый (Mystic Purple)",  "emoji": "🟣", "price": 25000},
+    "orange": {"name": "Оранжевый (Copper Orange)",   "emoji": "🟠", "price": 25000},
+    "black":  {"name": "Чёрный (Obsidian Black)",     "emoji": "⚫", "price": 15000},
+    "white":  {"name": "Белый (Polar White)",         "emoji": "⚪", "price": 10000},
+    "brown":  {"name": "Бронзовый (Citrine Brown)",   "emoji": "🟤", "price": 18000},
+    "grey":   {"name": "Матовый серый (Selenite Magno)", "emoji": "🔘", "price": 22000},
+}
+COLOR_PALETTE = ["🔴", "🟡", "🟢", "🔵", "🟣", "🟠", "⚫", "⚪", "🟤", "🔘"]
+
+
+def assign_unique_colors(p1_pref: str = None, p2_pref: str = None) -> tuple:
+    """
+    Выдает уникальные цвета участникам заезда.
+    Если у игрока есть покрашенная тачка, пытается выдать его цвет.
+    Гарантирует, что у обоих соперников разные цвета!
+    """
+    import random
+    palette = list(COLOR_PALETTE)
+
+    c1 = None
+    if p1_pref and p1_pref in CAR_COLORS:
+        c1 = CAR_COLORS[p1_pref]["emoji"]
+    elif p1_pref in COLOR_PALETTE:
+        c1 = p1_pref
+    else:
+        c1 = random.choice(palette)
+
+    avail = [c for c in palette if c != c1]
+
+    c2 = None
+    if p2_pref and p2_pref in CAR_COLORS:
+        cand2 = CAR_COLORS[p2_pref]["emoji"]
+        c2 = cand2 if cand2 in avail else random.choice(avail)
+    elif p2_pref in avail:
+        c2 = p2_pref
+    else:
+        c2 = random.choice(avail)
+
+    return c1, c2
+
 
 def _car(name, cls, emoji, price, lvl, power, speed, accel, handling, weight, desc):
     return dict(name=name, cls=cls, emoji=emoji, price=price, level_req=lvl, power=power,

@@ -1,7 +1,7 @@
 """Игровой движок: статы, симуляция гонок, награды, достижения."""
 import random
 
-from data import CAR_CATALOG, UPGRADE_BONUSES, UPGRADE_DEFS, DAILY_REWARDS
+from data import CAR_CATALOG, UPGRADE_BONUSES, UPGRADE_DEFS, DAILY_REWARDS, assign_unique_colors, CAR_COLORS
 
 STAT_KEYS = ("power", "speed", "acceleration", "handling", "weight")
 
@@ -30,21 +30,42 @@ def car_upgrades(player_car: dict) -> dict:
 
 
 ROUNDS = [
-    ("🚦 СТАРТ", {"accel": 0.6, "power": 0.2}, 0.2),
-    ("🛣 ПРЯМАЯ", {"speed": 0.4, "power": 0.35}, 0.25),
-    ("↩️ ПОВОРОТ", {"handling": 0.55, "weight": 0.25}, 0.2),
-    ("🏎 СПРИНТ", {"power": 0.4, "accel": 0.35}, 0.25),
-    ("🏁 ФИНИШ", {"speed": 0.25, "power": 0.25, "accel": 0.2, "handling": 0.15}, 0.15),
+    ("🚦 СТАРТ", {"accel": 0.65, "power": 0.25}, 0.2),
+    ("🛣 ПРЯМАЯ", {"speed": 0.45, "power": 0.40}, 0.25),
+    ("↩️ ПОВОРОТ", {"handling": 0.65, "weight": 0.25}, 0.2),
+    ("🏎 СПРИНТ", {"power": 0.45, "accel": 0.40}, 0.25),
+    ("🏁 ФИНИШ", {"speed": 0.3, "power": 0.3, "accel": 0.2, "handling": 0.2}, 0.15),
 ]
 
 PHRASES = {
-    "🚦 СТАРТ": ["{a} срывается с места с визгом шин!", "{a} идеально ловит старт!", "{b} буксует, {a} уходит вперёд!"],
-    "🛣 ПРЯМАЯ": ["{a} давит в пол — стрелка за 250!", "На прямой {a} показывает мощь V8!", "{a} уходит в отрыв на прямой!"],
-    "↩️ ПОВОРОТ": ["{a} проходит поворот как по рельсам!", "{b} заносит, {a} пользуется моментом!", "{a} тормозит позже всех и выигрывает метры!"],
-    "🏎 СПРИНТ": ["{a} врубает нитро! 💨", "{a} выжимает всё из мотора!", "Рёв выхлопа — {a} снова впереди!"],
-    "🏁 ФИНИШ": ["{a} первым пересекает черту!", "Фотофиниш... и это {a}!", "{a} вырывает победу на последних метрах!"],
+    "🚦 СТАРТ": [
+        "{c_a} <b>{a}</b> сорвался с лаунча как ракета!",
+        "{c_a} <b>{a}</b> идеально поймал момент сцепления шин!",
+        "{c_b} {b} слегка пробуксовал, {c_a} <b>{a}</b> вырывается на корпус вперёд!"
+    ],
+    "🛣 ПРЯМАЯ": [
+        "На длинной прямой {c_a} <b>{a}</b> развивает бешеную тягу V8 Biturbo!",
+        "{c_a} <b>{a}</b> ловит слипстрим и обходит соперника на скорости 270 км/ч!",
+        "Стрелка спидометра зашкаливает: {c_a} <b>{a}</b> летит впереди!"
+    ],
+    "↩️ ПОВОРОТ": [
+        "↩️ {c_a} <b>{a}</b> филигранно срезает апекс по идеальной траектории!",
+        "↩️ {c_b} {b} сносит заднюю ось! {c_a} <b>{a}</b> прошивает поворот!",
+        "↩️ Позднее торможение: {c_a} <b>{a}</b> удерживает внутренний радиус!"
+    ],
+    "🏎 СПРИНТ": [
+        "🏎 {c_a} <b>{a}</b> врубает баллон нитро и открывает дроссели на 100%!",
+        "🏎 Рёв прямоточного выхлопа AMG: {c_a} <b>{a}</b> держит газ в полу!",
+        "🏎 Борьба на пределе сцепления: {c_a} <b>{a}</b> штурмует прямик!"
+    ],
+    "🏁 ФИНИШ": [
+        "🏁 {c_a} <b>{a}</b> первым влетает под клетчатый флаг!",
+        "🏁 Финишная черта! {c_a} <b>{a}</b> забирает заезд!",
+        "🏁 Считанные доли секунды — и {c_a} <b>{a}</b> вырывает победу!"
+    ],
 }
-CLOSE = ["Борьба нос к носу!", "Разница — считанные сантиметры!", "Никто не уступает!"]
+
+CLOSE = ["🔥 Борьба нос в нос!", "⚡ Разрыв в миллиметры!", "💥 Никто не уступает!"]
 
 
 def _norm(s: dict) -> dict:
@@ -57,8 +78,22 @@ def _norm(s: dict) -> dict:
     }
 
 
-def simulate_race(s1: dict, s2: dict, name1: str, name2: str, p1_insured: bool = False, p2_insured: bool = False, p1_immune: bool = False, p2_immune: bool = False) -> dict:
-    # 1% шанс аварии (самая слабая машина в тире никогда не разбивается)
+def simulate_race(
+    s1: dict,
+    s2: dict,
+    name1: str,
+    name2: str,
+    p1_insured: bool = False,
+    p2_insured: bool = False,
+    p1_immune: bool = False,
+    p2_immune: bool = False,
+    p1_color: str = None,
+    p2_color: str = None
+) -> dict:
+    # Присваиваем каждому участнику УНИКАЛЬНЫЙ цвет
+    c1, c2 = assign_unique_colors(p1_color, p2_color)
+
+    # 1% шанс аварии
     p1_crash = (random.random() < 0.01) and (not p1_immune)
     p2_crash = (random.random() < 0.01) and (not p2_immune)
 
@@ -75,25 +110,28 @@ def simulate_race(s1: dict, s2: dict, name1: str, name2: str, p1_insured: bool =
             insurance_saved_2 = True
             crashed_2 = False
 
-
         if crashed_1 and not crashed_2:
             return {
                 "winner": 2,
                 "crashed": 1,
                 "insurance_saved": 0,
-                "narrative": f"💥 <b>АВАРИЯ НА СКОРОСТИ 280 КМ/Ч!</b>\nМашину <b>{name1}</b> развернуло в отбойник! Гонка окончена.",
-                "margin": "из-за вылета соперника! 🚨"
+                "narrative": f"💥 <b>АВАРИЯ НА СКОРОСТИ 280 КМ/Ч!</b>\nБолид {c1} <b>{name1}</b> развернуло в отбойник! Гонка окончена.",
+                "margin": "из-за вылета соперника! 🚨",
+                "color1": c1,
+                "color2": c2
             }
         elif crashed_2 and not crashed_1:
             return {
                 "winner": 1,
                 "crashed": 2,
                 "insurance_saved": 0,
-                "narrative": f"💥 <b>АВАРИЯ НА СКОРОСТИ 280 КМ/Ч!</b>\nМашину <b>{name2}</b> занесло в ограждение! Гонка окончена.",
-                "margin": "из-за вылета соперника! 🚨"
+                "narrative": f"💥 <b>АВАРИЯ НА СКОРОСТИ 280 КМ/Ч!</b>\nБолид {c2} <b>{name2}</b> занесло в ограждение! Гонка окончена.",
+                "margin": "из-за вылета соперника! 🚨",
+                "color1": c1,
+                "color2": c2
             }
         elif insurance_saved_1 or insurance_saved_2:
-            saved_name = name1 if insurance_saved_1 else name2
+            saved_name = f"{c1} {name1}" if insurance_saved_1 else f"{c2} {name2}"
             saved_note = f"🛡 <i>Страховка AMG спасла {saved_name} от крушения! Системы удержали курс.</i>\n\n"
         else:
             saved_note = ""
@@ -103,24 +141,74 @@ def simulate_race(s1: dict, s2: dict, name1: str, name2: str, p1_insured: bool =
     n1, n2 = _norm(s1), _norm(s2)
     total1 = total2 = 0.0
     lines = []
-    for rname, weights, rnd_w in ROUNDS:
+    prev_leader_idx = None
+
+    for r_idx, (rname, weights, rnd_w) in enumerate(ROUNDS, start=1):
         base1 = sum(n1[k] * w for k, w in weights.items())
         base2 = sum(n2[k] * w for k, w in weights.items())
         avg = (base1 + base2) / 2 or 1
-        sc1 = base1 * random.uniform(0.85, 1.15) + avg * rnd_w * 1.5 * random.random()
-        sc2 = base2 * random.uniform(0.85, 1.15) + avg * rnd_w * 1.5 * random.random()
+
+        # Динамика на повороте: увеличиваем влияние управляемости для интриги
+        if "ПОВОРОТ" in rname:
+            turn_rnd = random.uniform(0.75, 1.25)
+            sc1 = base1 * turn_rnd + avg * rnd_w * 1.8 * random.random()
+            sc2 = base2 * (2.0 - turn_rnd) + avg * rnd_w * 1.8 * random.random()
+        else:
+            sc1 = base1 * random.uniform(0.85, 1.15) + avg * rnd_w * 1.5 * random.random()
+            sc2 = base2 * random.uniform(0.85, 1.15) + avg * rnd_w * 1.5 * random.random()
+
         total1 += sc1
         total2 += sc2
-        a, b = (name1, name2) if sc1 >= sc2 else (name2, name1)
-        diff = abs(sc1 - sc2) / max(sc1, sc2, 1)
-        text = random.choice(PHRASES[rname]).format(a=f"<b>{a}</b>", b=b)
+
+        round_winner = 1 if sc1 >= sc2 else 2
+        overall_leader = 1 if total1 >= total2 else 2
+
+        # Данные лидера и преследователя
+        if round_winner == 1:
+            a_name, b_name = name1, name2
+            c_a, c_b = c1, c2
+        else:
+            a_name, b_name = name2, name1
+            c_a, c_b = c2, c1
+
+        # Формируем интригующее описание
+        is_overtake = (prev_leader_idx is not None and overall_leader != prev_leader_idx)
+        prev_leader_idx = overall_leader
+
+        if is_overtake and "ПОВОРОТ" in rname:
+            overtake_desc = f"⚡ <b>ПЕРЕХВАТ ЛИДЕРСТВА В ПОВОРОТЕ!</b> {c_a} <b>{a_name}</b> ныряет по внутреннему радиусу и вырывается вперёд!"
+            text = overtake_desc
+        elif is_overtake and "ПРЯМАЯ" in rname:
+            overtake_desc = f"🚀 <b>ОБГОН НА ПРЯМОЙ!</b> {c_a} <b>{a_name}</b> на слипстриме обходит {c_b} {b_name}!"
+            text = overtake_desc
+        else:
+            text = random.choice(PHRASES[rname]).format(a=a_name, b=b_name, c_a=c_a, c_b=c_b)
+
+        # Вычисляем разрыв
+        diff = abs(total1 - total2) / max(total1, total2, 1)
         if diff < 0.03:
             text = random.choice(CLOSE) + " " + text
-        leader = name1 if total1 >= total2 else name2
-        lines.append(f"<b>{rname}</b>\n{text}\n<i>Лидирует: {leader}</i>")
+
+        # Кто сейчас лидирует в гонке
+        leader_color = c1 if overall_leader == 1 else c2
+        leader_name = name1 if overall_leader == 1 else name2
+        gap_meters = max(1, int(diff * 80))
+
+        # Визуальная шкала дистанции
+        if diff < 0.02:
+            track_bar = f"<code>[🏁 ─── {c1}🏎 {c2}🏎 БОК О БОК! ───]</code>"
+        elif overall_leader == 1:
+            track_bar = f"<code>[🏁 ── {c1}🏎 ── +{gap_meters}м ── {c2}🏎 ──]</code>"
+        else:
+            track_bar = f"<code>[🏁 ── {c2}🏎 ── +{gap_meters}м ── {c1}🏎 ──]</code>"
+
+        status_line = f"🥇 <b>ВЕДЁТ:</b> {leader_color} <b>{leader_name}</b>"
+        lines.append(f"<b>{rname}</b>\n{text}\n{track_bar}\n{status_line}")
+
     winner = 1 if total1 >= total2 else 2
     gap = abs(total1 - total2) / max(total1, total2)
     margin = "с огромным отрывом! 🔥" if gap > 0.12 else "в упорной борьбе! 💪" if gap > 0.04 else "на волоске! 😱"
+
     return {
         "winner": winner,
         "crashed": 0,
@@ -128,8 +216,11 @@ def simulate_race(s1: dict, s2: dict, name1: str, name2: str, p1_insured: bool =
         "narrative": saved_note + "\n\n".join(lines),
         "round_steps": lines,
         "saved_note": saved_note,
-        "margin": margin
+        "margin": margin,
+        "color1": c1,
+        "color2": c2
     }
+
 
 
 

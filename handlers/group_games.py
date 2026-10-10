@@ -308,6 +308,19 @@ async def cb_tourn_start(cb: CallbackQuery):
     status_msg = await cb.message.edit_text("🚦 <b>3... 2... 1... СТАРТ ГРАН-ПРИ!</b>\nМашины сорвались со старта!")
     await asyncio.sleep(1.5)
 
+    # Назначаем уникальные цвета участникам (приоритет - цвет покраски машины)
+    used_colors = set()
+    participant_colors = {}
+    for uid in t["participants"]:
+        pc = t["cars"][uid]
+        pref = pc.get("color")
+        c_emoji = data.CAR_COLORS[pref]["emoji"] if (pref and pref in data.CAR_COLORS) else None
+        if not c_emoji or c_emoji in used_colors:
+            avail = [c for c in data.COLOR_PALETTE if c not in used_colors]
+            c_emoji = random.choice(avail) if avail else random.choice(data.COLOR_PALETTE)
+        used_colors.add(c_emoji)
+        participant_colors[uid] = c_emoji
+
     # Симулируем заезд каждого с учетом рейтинга и рандома
     scores = []
     for uid in t["participants"]:
@@ -324,6 +337,7 @@ async def cb_tourn_start(cb: CallbackQuery):
     res_lines = []
     for i, (_, uid, name, car_name) in enumerate(scores):
         m = medals[i] if i < 3 else f"{i + 1}."
+        col = participant_colors.get(uid, "🏎")
         reward_txt = ""
         if i == 0:
             await db.add_coins_admin(uid, 40, reason="1 место в Гран-при чата")
@@ -340,13 +354,15 @@ async def cb_tourn_start(cb: CallbackQuery):
             await db.add_money(uid, 6000)
             await db.add_xp(uid, 80)
             reward_txt = " (+10 🪙, +$6k, +80 XP)"
-        res_lines.append(f"{m} <b>{name}</b> ({car_name}){reward_txt}")
+        res_lines.append(f"{m} {col} <b>{name}</b> ({car_name}){reward_txt}")
 
+    winner_uid = scores[0][1]
     winner_name = scores[0][2]
+    win_col = participant_colors.get(winner_uid, "🏎")
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
     await status_msg.edit_text(
         f"{gif_tag}🏁 <b>ФИНИШ ГРАН-ПРИ ЧАТА!</b>\n\n"
-        f"🏆 Чемпион заезда: <b>{winner_name}</b>!\n\n"
+        f"🏆 Чемпион заезда: {win_col} <b>{winner_name}</b>!\n\n"
         f"📋 <b>Итоговая таблица:</b>\n" + "\n".join(res_lines)
     )
     TOURNAMENTS.pop(chat_id, None)

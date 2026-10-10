@@ -2,7 +2,7 @@
 from aiogram.types import InlineKeyboardButton as Btn, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from data import (CAR_CATALOG, CAR_CLASSES, CAR_CLASS_EMOJIS, CAR_CLASS_NAMES, COIN_SHOP,
+from data import (CAR_CATALOG, CAR_CLASSES, CAR_CLASS_EMOJIS, CAR_CLASS_NAMES, CAR_COLORS, COIN_SHOP,
                   DIFFICULTY_EMOJI, STREET_OPPONENTS, UPGRADE_DEFS, fmt, get_upgrade_cost)
 
 
@@ -47,9 +47,21 @@ def car_actions_kb(car_id: int, is_selected: bool) -> InlineKeyboardMarkup:
     if not is_selected:
         rows.append([Btn(text="✅ Сделать основной", callback_data=f"car_select:{car_id}")])
     rows.append([Btn(text="🔧 Тюнинг", callback_data=f"tuning:{car_id}"),
-                 Btn(text="💰 Продать", callback_data=f"car_sell:{car_id}")])
-    rows.append([Btn(text="◀️ В гараж", callback_data="garage:0")])
+                 Btn(text="🎨 Покраска", callback_data=f"car_paint:{car_id}")])
+    rows.append([Btn(text="💰 Продать", callback_data=f"car_sell:{car_id}"),
+                 Btn(text="◀️ В гараж", callback_data="garage:0")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def paint_shop_kb(car_id: int, current_color_key: str = None) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for key, c_info in CAR_COLORS.items():
+        is_cur = (current_color_key == key)
+        status = " (Установлен) ✅" if is_cur else f" — ${fmt(c_info['price'])}"
+        b.button(text=f"{c_info['emoji']} {c_info['name']}{status}", callback_data=f"car_paint_buy:{car_id}:{key}")
+    b.button(text="◀️ Назад к машине", callback_data=f"car:{car_id}")
+    b.adjust(1)
+    return b.as_markup()
 
 
 def sell_confirm_kb(car_id: int, price: int) -> InlineKeyboardMarkup:
