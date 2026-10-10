@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Mercedes-AMG Racing — Загрузка приложения</title>
+  
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏎️</text></svg>">
+  
+  <!-- Google Fonts: Orbitron & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800;900&display=swap" rel="stylesheet">
+  
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <style>
+    :root {
+      --bg-dark: #07090e;
+      --bg-panel: rgba(15, 18, 28, 0.75);
+      --amg-red: #e10600;
+      --amg-red-glow: rgba(225, 6, 0, 0.4);
+      --amg-cyan: #00f0ff;
+      --amg-cyan-glow: rgba(0, 240, 255, 0.35);
+      --amg-silver: #d1d5db;
+      --amg-gold: #fbbf24;
+      --text-white: #ffffff;
+      --text-muted: #94a3b8;
+      --border-panel: rgba(255, 255, 255, 0.1);
+      --font-tech: 'Orbitron', monospace, sans-serif;
+      --font-main: 'Inter', system-ui, sans-serif;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-white);
+      font-family: var(--font-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow-x: hidden;
+      position: relative;
+      background-image: 
+        radial-gradient(circle at 50% 10%, rgba(225, 6, 0, 0.12) 0%, transparent 50%),
+        radial-gradient(circle at 50% 90%, rgba(0, 240, 255, 0.08) 0%, transparent 50%),
+        repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.01) 0px, rgba(255, 255, 255, 0.01) 2px, transparent 2px, transparent 8px);
+      background-attachment: fixed;
+    }
+
+    /* Анимированная подсветка на фоне */
+    .ambient-glow {
+      position: absolute;
+      width: 450px;
+      height: 450px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--amg-red-glow) 0%, transparent 70%);
+      filter: blur(80px);
+      z-index: 0;
+      pointer-events: none;
+      animation: pulseGlow 5s ease-in-out infinite alternate;
+    }
+
+    @keyframes pulseGlow {
+      0% { transform: scale(0.9) translate(-10%, -10%); opacity: 0.5; }
+      100% { transform: scale(1.15) translate(10%, 10%); opacity: 0.85; }
+    }
+
+    /* ── Главный контейнер лоадера ──────────────────────────────── */
+    .loader-container {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      max-width: 480px;
+      padding: 32px 24px;
+      text-align: center;
+      transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Логотип AMG */
+    .amg-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .amg-badge {
+      font-family: var(--font-tech);
+      font-size: 1.4rem;
+      font-weight: 900;
+      letter-spacing: 0.15em;
+      color: #ffffff;
+      padding: 6px 16px;
+      background: linear-gradient(135deg, rgba(225, 6, 0, 0.25) 0%, rgba(15, 18, 28, 0.8) 100%);
+      border: 1px solid var(--amg-red);
+      border-radius: 8px;
+      box-shadow: 0 0 25px var(--amg-red-glow);
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.6);
+    }
+
+    .amg-sub-brand {
+      font-size: 0.8rem;
+      color: var(--amg-cyan);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      font-weight: 700;
+      font-family: var(--font-tech);
+    }
+
+    /* ── Спидометр / Тахометр AMG ──────────────────────────────── */
+    .gauge-wrapper {
+      position: relative;
+      width: 260px;
+      height: 260px;
+      margin: 0 auto 28px auto;
+    }
+
+    .gauge-svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+
+    .gauge-track {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.08);
+      stroke-width: 12;
+      stroke-linecap: round;
+    }
+
+    .gauge-fill {
+      fill: none;
+      stroke: url(#amgGradient);
+      stroke-width: 12;
+      stroke-linecap: round;
+      stroke-dasharray: 690;
+      stroke-dashoffset: 690;
+      transition: stroke-dashoffset 0.3s ease;
+      filter: drop-shadow(0 0 12px var(--amg-red));
+    }
+
+    /* Цифровой спидометр внутри */
+    .gauge-center {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .speed-value {
+      font-family: var(--font-tech);
+      font-size: 3.2rem;
+      font-weight: 900;
+      line-height: 1;
+      color: #ffffff;
+      text-shadow: 0 0 20px rgba(255, 255, 255, 0.7);
+    }
+
+    .speed-unit {
+      font-family: var(--font-tech);
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--amg-cyan);
+      letter-spacing: 0.15em;
+      margin-top: 4px;
+    }
+
+    .rpm-text {
+      font-family: var(--font-tech);
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+
+    .gear-display {
+      font-family: var(--font-tech);
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: var(--amg-red);
+      background: rgba(225, 6, 0, 0.15);
+      border: 1px solid rgba(225, 6, 0, 0.3);
+      padding: 2px 10px;
+      border-radius: 4px;
+      margin-top: 6px;
+    }
+
+    /* ── Статус загрузки и прогресс ────────────────────────────── */
+    .status-card {
+      background: var(--bg-panel);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-panel);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6);
+      transition: all 0.3s ease;
+    }
+
+    .status-step-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .status-step-desc {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+      min-height: 40px;
+    }
+
+    /* Анимированная полоса прогресса */
+    .progress-bar-container {
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      margin: 16px 0 12px 0;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--amg-cyan) 0%, var(--amg-red) 100%);
+      border-radius: 999px;
+      box-shadow: 0 0 15px var(--amg-red-glow);
+      transition: width 0.35s ease;
+    }
+
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-tech);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* ── Кнопки перехода и действий ────────────────────────────── */
+    .action-buttons {
+      margin-top: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .btn-amg {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-family: var(--font-tech);
+      font-size: 0.95rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border: none;
+      text-decoration: none;
+      color: #ffffff;
+      background: linear-gradient(135deg, #e10600 0%, #990000 100%);
+      box-shadow: 0 4px 25px var(--amg-red-glow);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-amg:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 35px rgba(225, 6, 0, 0.65);
+    }
+
+    .btn-outline {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: none;
+      font-family: var(--font-main);
+      font-weight: 600;
+    }
+
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--amg-cyan);
+      box-shadow: 0 0 20px var(--amg-cyan-glow);
+    }
+
+    /* ── Панель готового состояния (Success View) ──────────────── */
+    .success-view {
+      display: none;
+      animation: fadeIn 0.5s ease forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Живая плашка сервера */
+    .server-ping {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: var(--amg-cyan);
+      padding: 6px 14px;
+      background: rgba(0, 240, 255, 0.08);
+      border: 1px solid rgba(0, 240, 255, 0.2);
+      border-radius: 999px;
+      margin-top: 14px;
+    }
+
+    .ping-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 10px #10b981;
+      animation: blink 1.5s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ambient-glow"></div>
+
+  <div class="loader-container">
+    
+    <!-- Бренд AMG -->
+    <div class="amg-brand">
+      <div>
+        <div class="amg-badge">///AMG</div>
+        <div class="amg-sub-brand">RACING PERFORMANCE</div>
+      </div>
+    </div>
+
+    <!-- Интерактивный спидометр-тахометр -->
+    <div class="gauge-wrapper">
+      <svg class="gauge-svg" viewBox="0 0 240 240">
+        <defs>
+          <linearGradient id="amgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#00f0ff" />
+            <stop offset="65%" stop-color="#fbbf24" />
+            <stop offset="100%" stop-color="#e10600" />
+          </linearGradient>
+        </defs>
+        <circle class="gauge-track" cx="120" cy="120" r="100" />
+        <circle class="gauge-fill" id="gauge-fill" cx="120" cy="120" r="100" />
+      </svg>
+
+      <div class="gauge-center">
+        <div class="speed-value" id="speed-num">0</div>
+        <div class="speed-unit">KM / H</div>
+        <div class="gear-display" id="gear-display">GEAR: N</div>
+        <div class="rpm-text" id="rpm-text">0 RPM</div>
+      </div>
+    </div>
+
+    <!-- Карточка статуса с лоадером -->
+    <div class="status-card" id="loading-card">
+      <div class="status-step-title" id="step-title">
+        <span>⚡</span> <span>Инициализация систем AMG...</span>
+      </div>
+      <div class="status-step-desc" id="step-desc">
+        Калибровка телеметрии и подготовка к безопасному заезду
+      </div>
+
+      <!-- Полоса прогресса -->
+      <div class="progress-bar-container">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+
+      <div class="progress-meta">
+        <span id="backend-indicator">Связь: поиск бэкенда...</span>
+        <span id="progress-pct">0%</span>
+      </div>
+
+      <div class="server-ping">
+        <span class="ping-dot"></span>
+        <span id="ping-text">Render Web Service: Проверка</span>
+      </div>
+    </div>
+
+    <!-- Карточка успешного подключения (Success View) -->
+    <div class="status-card success-view" id="success-card">
+      <div style="font-size: 2.2rem; margin-bottom: 8px;">🏁</div>
+      <h2 style="font-family: var(--font-tech); font-size: 1.4rem; color: #ffffff; margin-bottom: 8px;">
+        СИСТЕМЫ ОНЛАЙН!
+      </h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">
+        Бэкенд AMG Racing успешно подключён. Выполняется плавный переход в игру...
+      </p>
+
+      <div class="action-buttons">
+        <a href="https://t.me/AmgRaceBot" id="btn-open-bot" class="btn-amg">
+          🚀 Войти в заезд (@AmgRaceBot)
+        </a>
+        <button type="button" id="btn-cancel-redirect" class="btn-amg btn-outline">
+          Остаться на портале
+        </button>
+      </div>
+
+      <div class="server-ping" style="margin-top: 20px;">
+        <span class="ping-dot"></span>
+        <span>21 болид AMG • V8 Biturbo • 24/7 Онлайн</span>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ── Telegram WebApp Initialization ─────────────────────────
+    if (window.Telegram && window.Telegram.WebApp) {
+      try {
+        window.Telegram.WebApp.ready();
+        window.Telegram.WebApp.expand();
+      } catch (e) {
+        console.log("Not in Telegram WebApp wrapper");
+      }
+    }
+
+    // Элементы интерфейса
+    const gaugeFill = document.getElementById("gauge-fill");
+    const speedNum = document.getElementById("speed-num");
+    const gearDisplay = document.getElementById("gear-display");
+    const rpmText = document.getElementById("rpm-text");
+    const progressFill = document.getElementById("progress-fill");
+    const progressPct = document.getElementById("progress-pct");
+    const stepTitle = document.getElementById("step-title");
+    const stepDesc = document.getElementById("step-desc");
+    const pingText = document.getElementById("ping-text");
+    const backendIndicator = document.getElementById("backend-indicator");
+    const loadingCard = document.getElementById("loading-card");
+    const successCard = document.getElementById("success-card");
+    const btnOpenBot = document.getElementById("btn-open-bot");
+    const btnCancelRedirect = document.getElementById("btn-cancel-redirect");
+
+    let isRedirectCancelled = false;
+    let botUsername = "AmgRaceBot";
+
+    // AMG Тексты подсказок во время ожидания бэкенда Render
+    const AMG_TIPS = [
+      "Разогрев твин-турбо V8 4.0L до рабочей температуры...",
+      "Проверка сцепления шин Michelin Pilot Sport Cup 2...",
+      "Калибровка дифференциала AMG Ride Control+...",
+      "Синхронизация рейтинга пилотов и таблиц лидеров...",
+      "Бесплатный сервер Render просыпается (cold-start), подождите несколько секунд...",
+      "Прогрев выхлопной системы AMG Performance... Скоро на старт!"
+    ];
+
+    // Функция обновления визуального спидометра (0% - 100%)
+    function updateSpeedometer(percent) {
+      const maxDash = 628; // Длина дуги 2 * PI * r (100px)
+      const offset = maxDash - (maxDash * (percent / 100));
+      gaugeFill.style.strokeDashoffset = offset;
+
+      // Симулируем скорость от 0 до 325 км/ч
+      const currentSpeed = Math.round((percent / 100) * 325);
+      speedNum.textContent = currentSpeed;
+
+      // Симулируем передачу КПП AMG Speedshift MCT 9G
+      let gear = "N";
+      if (percent > 85) gear = "D-5";
+      else if (percent > 65) gear = "D-4";
+      else if (percent > 45) gear = "D-3";
+      else if (percent > 25) gear = "D-2";
+      else if (percent > 5) gear = "D-1";
+      gearDisplay.textContent = `GEAR: ${gear}`;
+
+      // Симулируем обороты (0 - 7500 RPM)
+      const rpm = Math.round((percent / 100) * 7500);
+      rpmText.textContent = `${rpm.toLocaleString()} RPM`;
+
+      // Прогресс бар
+      progressFill.style.width = `${percent}%`;
+      progressPct.textContent = `${Math.round(percent)}%`;
+    }
+
+    // ── Асинхронный опрос бэкенда с обработкой ожидания (async/await) ──
+    async function connectToBackendWithRetry() {
+      let percent = 5;
+      updateSpeedometer(percent);
+
+      let attempts = 0;
+      let tipIndex = 0;
+
+      while (true) {
+        attempts++;
+        backendIndicator.textContent = `Запрос к бэкенду (попытка #${attempts})...`;
+        pingText.textContent = `Render: Ожидание ответа (${attempts * 2} сек)`;
+
+        // Постепенно двигаем стрелку, показывая активность
+        if (percent < 85) {
+          percent += 8;
+          updateSpeedometer(percent);
+        }
+
+        // Периодически меняем советы
+        if (attempts % 2 === 0) {
+          stepDesc.textContent = AMG_TIPS[tipIndex % AMG_TIPS.length];
+          tipIndex++;
+        }
+
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 секунд таймаут
+
+          const response = await fetch("/api/status", {
+            method: "GET",
+            headers: { "Accept": "application/json" },
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.bot_username) {
+              botUsername = data.bot_username;
+              btnOpenBot.href = `https://t.me/${botUsername}`;
+            }
+
+            // Бэкенд онлайн! Разгоняем спидометр до 100%
+            updateSpeedometer(100);
+            stepTitle.innerHTML = "<span>🟢</span> <span>Бэкенд на связи!</span>";
+            stepDesc.textContent = "Сервер Render полностью активен и готов к заездам!";
+            pingText.textContent = "Render Web Service: 200 OK (Активен)";
+            backendIndicator.textContent = "Статус: Онлайн 🟢";
+
+            // Даём 0.8 сек насладиться звуком финиша и переключаем экран
+            await new Promise(r => setTimeout(r, 800));
+            onBackendConnectedSuccess();
+            return;
+          }
+        } catch (err) {
+          // Сервер Render ещё поднимается (cold-start) — продолжаем аккуратный опрос
+          stepTitle.innerHTML = "<span>⏳</span> <span>Разогрев бэкенда Render...</span>";
+          console.log(`Waiting for backend wake-up, attempt ${attempts}...`);
+        }
+
+        // Пауза перед следующим асинхронным запросом
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+
+    // ── Обработка успешного подключения и плавная переадресация ────
+    function onBackendConnectedSuccess() {
+      // Haptic feedback для Telegram
+      if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+        try {
+          window.Telegram.WebApp.HapticFeedback.notificationOccurred("success");
+        } catch (e) {}
+      }
+
+      // Плавное скрытие карточки лоадера и показ карточки успеха
+      loadingCard.style.display = "none";
+      successCard.style.display = "block";
+
+      // Плавная автоматическая переадресация через 2.5 секунды
+      let countdown = 3;
+      const redirectTimer = setInterval(() => {
+        if (isRedirectCancelled) {
+          clearInterval(redirectTimer);
+          return;
+        }
+
+        countdown--;
+        if (countdown <= 0) {
+          clearInterval(redirectTimer);
+          executeSmoothRedirect();
+        }
+      }, 1000);
+
+      btnCancelRedirect.addEventListener("click", () => {
+        isRedirectCancelled = true;
+        btnCancelRedirect.textContent = "Редирект отменён";
+        btnCancelRedirect.style.borderColor = "var(--amg-red)";
+      });
+    }
+
+    function executeSmoothRedirect() {
+      const targetUrl = `https://t.me/${botUsername}`;
+      // Если запущено внутри Telegram WebApp — просто закрываем окно или открываем бота
+      if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openTelegramLink) {
+        try {
+          window.Telegram.WebApp.openTelegramLink(targetUrl);
+          return;
+        } catch (e) {}
+      }
+      window.location.href = targetUrl;
+    }
+
+    // Запуск процесса при загрузке страницы
+    document.addEventListener("DOMContentLoaded", () => {
+      connectToBackendWithRetry();
+    });
+  </script>
+</body>
+</html>
+
