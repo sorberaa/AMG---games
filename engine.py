@@ -6,7 +6,7 @@ from data import CAR_CATALOG, UPGRADE_BONUSES, UPGRADE_DEFS, DAILY_REWARDS, assi
 STAT_KEYS = ("power", "speed", "acceleration", "handling", "weight")
 
 
-def calc_stats(car: dict, upgrades: dict) -> dict:
+def calc_stats(car: dict, upgrades: dict, speed_mult: float = 1.0) -> dict:
     """car — запись из CAR_CATALOG, upgrades — {'engine': 2, ...} или строка player_cars."""
     pct = {"power_pct": 0, "speed_pct": 0, "accel_pct": 0, "handling_pct": 0, "weight_pct": 0}
     for key in UPGRADE_DEFS:
@@ -16,7 +16,7 @@ def calc_stats(car: dict, upgrades: dict) -> dict:
                 pct[k] += v
     s = {
         "power": car["power"] * (1 + pct["power_pct"] / 100),
-        "speed": car["speed"] * (1 + pct["speed_pct"] / 100),
+        "speed": car["speed"] * (1 + pct["speed_pct"] / 100) * speed_mult,
         "acceleration": max(1.8, car["acceleration"] * (1 - pct["accel_pct"] / 100)),
         "handling": min(150, car["handling"] * (1 + pct["handling_pct"] / 100)),
         "weight": car["weight"] * (1 + pct["weight_pct"] / 100),

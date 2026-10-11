@@ -35,6 +35,17 @@ def set_admin_cache(user_id: int, value: bool):
     (_admin_cache.add if value else _admin_cache.discard)(user_id)
 
 
+def is_salt_boosted(player: dict | None) -> bool:
+    if not player or not player.get("salt_boost_until"):
+        return False
+    try:
+        from datetime import datetime
+        exp = datetime.strptime(player["salt_boost_until"], db.TS_FMT)
+        return datetime.utcnow() < exp
+    except Exception:
+        return False
+
+
 async def ensure_player(user: User) -> dict:
     p = await db.get_player(user.id)
     if p is None:

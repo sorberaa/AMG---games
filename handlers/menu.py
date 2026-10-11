@@ -12,10 +12,12 @@ router = Router(name="menu")
 
 def menu_text(p: dict) -> str:
     gif_tag = f"<a href='{data.AMG_GIFS['welcome']}'>&#8205;</a>"
+    from utils import is_salt_boosted
+    salt_indicator = " · 🧂 <b>СОЛЬ (+25% 🚀)</b>" if is_salt_boosted(p) else ""
     return (
         f"{gif_tag}🏎 <b>AMG RACING</b>\n\n"
         f"👤 {p['first_name']} · ур. <b>{p['level']}</b>\n"
-        f"🪙 <b>{fmt(p['coins'])} монет</b> · ⚡ {p['energy']}/{p['max_energy']}\n\n"
+        f"🪙 <b>{fmt(p['coins'])} монет</b> · ⚡ {p['energy']}/{p['max_energy']}{salt_indicator}\n\n"
         "Выбери раздел:"
     )
 
@@ -123,4 +125,78 @@ async def cb_group_info(cb: CallbackQuery):
 @router.callback_query(F.data == "noop")
 async def cb_noop(cb: CallbackQuery):
     await cb.answer("Уже на максимуме!")
+
+
+@router.callback_query(F.data == "salt_boost")
+async def cb_salt_boost(cb: CallbackQuery, player: dict):
+    await cb.answer()
+    from datetime import datetime
+    import db
+    from utils import is_salt_boosted
+    from aiogram.types import InlineKeyboardButton as Btn, InlineKeyboardMarkup
+
+    active = is_salt_boosted(player)
+    time_left = ""
+    if active:
+        try:
+            exp = datetime.strptime(player["salt_boost_until"], db.TS_FMT)
+            mins = max(1, int((exp - datetime.utcnow()).total_seconds() // 60))
+            time_left = f"\n\n⚡ <b>ЭФФЕКТ УЖЕ АКТИВЕН:</b> осталось <b>{mins} мин.</b> (+25% скорости)"
+        except Exception:
+            pass
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="💥 БАХНУТЬ СОЛИ (10 🪙)", callback_data="salt_boost:buy")],
+        [Btn(text="🌐 Перейти на сайт amglive.to", url="https://amglive.to")],
+        [Btn(text="◀️ В главное меню", callback_data="menu")],
+    ])
+
+    gif_tag = f"<a href='{data.AMG_GIFS['burnout']}'>&#8205;</a>"
+    await safe_edit(
+        cb,
+        f"{gif_tag}🧂 <b>ЭКСКЛЮЗИВНЫЙ ДОПИНГ: БАХНУТЬ СОЛИ!</b>\n\n"
+        "Заряди свой AMG нереальным безумным ускорением прямо с автобана!\n\n"
+        "⚡ <b>ЧТО ДАЁТ ЭТОТ БОНУС:</b>\n"
+        "• 🚀 <b>+25% К МАКСИМАЛЬНОЙ СКОРОСТИ</b> во всех заездах и дуэлях!\n"
+        "• ⏱ Длительность действия эффекта: <b>10 минут</b>\n"
+        "• 🌐 Доступ к закрытой платформе: <a href='https://amglive.to'>amglive.to</a>\n"
+        "• 💰 Стоимость активации: всего <b>10 🪙 монет</b>\n\n"
+        "Опережай соперников на прямых и оставляй их далеко позади в клубах дыма!{time_left}",
+        kb
+    )
+
+
+@router.callback_query(F.data == "salt_boost:buy")
+async def cb_salt_boost_buy(cb: CallbackQuery, player: dict):
+    from datetime import datetime, timedelta
+    import db
+    from utils import is_salt_boosted
+
+    uid = cb.from_user.id
+    cost = 10
+
+    p = await db.get_player(uid)
+    if not p or p["coins"] < cost:
+        return await cb.answer(f"❌ Недостаточно монет! Нужно {cost} 🪙 монет.", show_alert=True)
+
+    if not await db.spend_coins(uid, cost, reason="Бахнуть соли (+25% скорости)"):
+        return await cb.answer("❌ Ошибка списания монет.", show_alert=True)
+
+    # Добавляем 10 минут (если уже был активен, продлеваем на 10 минут)
+    now = datetime.utcnow()
+    if is_salt_boosted(p):
+        try:
+            curr_exp = datetime.strptime(p["salt_boost_until"], db.TS_FMT)
+            new_exp = curr_exp + timedelta(minutes=10)
+        except Exception:
+            new_exp = now + timedelta(minutes=10)
+    else:
+        new_exp = now + timedelta(minutes=10)
+
+    until_str = new_exp.strftime(db.TS_FMT)
+    await db.update_player(uid, salt_boost_until=until_str)
+    p_updated = await db.get_player(uid)
+
+    await cb.answer("💥 СОЛЬ ПРИНЯТА! +25% к скорости на 10 минут!", show_alert=True)
+    await cb_salt_boost(cb, p_updated)
 

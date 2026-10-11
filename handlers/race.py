@@ -142,7 +142,9 @@ async def cb_street_race(cb: CallbackQuery):
     opp_immune = data.is_weakest_in_tier(opp["car_key"])
 
     p_ins = bool(p.get("has_insurance"))
-    my_stats = calc_stats(my_car, car_upgrades(pc))
+    from utils import is_salt_boosted
+    my_spd_mult = 1.25 if is_salt_boosted(p) else 1.0
+    my_stats = calc_stats(my_car, car_upgrades(pc), speed_mult=my_spd_mult)
     my_color = pc.get("color")
     res = simulate_race(
         my_stats, calc_stats(opp_car, opp["upgrades"]), me, opp["name"],
@@ -343,8 +345,12 @@ async def cb_pvp_accept(cb: CallbackQuery):
     p2_ins = bool(p2.get("has_insurance"))
     p1_imm = data.is_weakest_in_tier(pc1["car_key"])
     p2_imm = data.is_weakest_in_tier(pc2["car_key"])
+    from utils import is_salt_boosted
+    s1_mult = 1.25 if is_salt_boosted(p1) else 1.0
+    s2_mult = 1.25 if is_salt_boosted(p2) else 1.0
     res = simulate_race(
-        calc_stats(c1, car_upgrades(pc1)), calc_stats(c2, car_upgrades(pc2)),
+        calc_stats(c1, car_upgrades(pc1), speed_mult=s1_mult),
+        calc_stats(c2, car_upgrades(pc2), speed_mult=s2_mult),
         n1, n2, p1_insured=p1_ins, p2_insured=p2_ins, p1_immune=p1_imm, p2_immune=p2_imm,
         p1_color=pc1.get("color"), p2_color=pc2.get("color")
     )

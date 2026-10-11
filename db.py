@@ -116,7 +116,7 @@ PLAYER_COLUMNS = {
     "username", "first_name", "level", "xp", "money", "coins", "coins_today", "coins_date",
     "reputation", "wins", "losses", "races_total", "pvp_wins", "daily_streak", "last_daily",
     "selected_car_id", "energy", "max_energy", "last_energy_update", "is_admin", "is_banned",
-    "has_insurance", "last_coin_duel", "chat_nitro_until", "gold_wrap", "defeated_opponents",
+    "has_insurance", "last_coin_duel", "chat_nitro_until", "salt_boost_until", "gold_wrap", "defeated_opponents",
     "easy_races_today", "easy_races_date", "last_wheel_spin", "last_adventure"
 }
 
@@ -140,6 +140,7 @@ async def init_db() -> None:
             ("has_insurance", "INTEGER DEFAULT 0"),
             ("last_coin_duel", "TEXT DEFAULT NULL"),
             ("chat_nitro_until", "TEXT DEFAULT NULL"),
+            ("salt_boost_until", "TEXT DEFAULT NULL"),
             ("gold_wrap", "INTEGER DEFAULT 0"),
             ("defeated_opponents", "INTEGER DEFAULT 0"),
             ("easy_races_today", "INTEGER DEFAULT 0"),
