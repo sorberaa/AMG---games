@@ -82,13 +82,19 @@ CAR_CATALOG = {
 }
 
 UPGRADE_DEFS = {
-    "engine":     {"name": "Двигатель", "emoji": "🔧", "max_level": 5, "mult": 1.0},
-    "turbo":      {"name": "Турбина", "emoji": "🌀", "max_level": 5, "mult": 1.2},
-    "suspension": {"name": "Подвеска", "emoji": "🔩", "max_level": 5, "mult": 0.8},
-    "tires":      {"name": "Шины", "emoji": "🛞", "max_level": 5, "mult": 0.6},
-    "nitro":      {"name": "Закись азота", "emoji": "💨", "max_level": 5, "mult": 1.1},
-    "ecu":        {"name": "Чип-тюнинг", "emoji": "💻", "max_level": 5, "mult": 0.9},
-    "body_kit":   {"name": "Обвес", "emoji": "🎨", "max_level": 5, "mult": 0.7},
+    "engine":       {"name": "Двигатель", "emoji": "🔧", "max_level": 5, "mult": 1.0},
+    "turbo":        {"name": "Турбина", "emoji": "🌀", "max_level": 5, "mult": 1.2},
+    "exhaust":      {"name": "Выхлоп AMG Sport", "emoji": "💨", "max_level": 5, "mult": 0.85},
+    "transmission": {"name": "КПП SpeedShift", "emoji": "🕹", "max_level": 5, "mult": 0.95},
+    "suspension":   {"name": "Подвеска Ride Control", "emoji": "🔩", "max_level": 5, "mult": 0.8},
+    "brakes":       {"name": "Карбон-керамика Brembo", "emoji": "🛑", "max_level": 5, "mult": 0.85},
+    "tires":        {"name": "Слики Michelin Pilot", "emoji": "🛞", "max_level": 5, "mult": 0.65},
+    "intercooler":  {"name": "Интеркулер Race", "emoji": "❄️", "max_level": 5, "mult": 0.9},
+    "intake":       {"name": "Карбоновый впуск", "emoji": "🌪", "max_level": 5, "mult": 0.75},
+    "downpipe":     {"name": "Спортивный Даунпайп", "emoji": "🔥", "max_level": 5, "mult": 1.05},
+    "nitro":        {"name": "Закись азота (NOS)", "emoji": "⚡", "max_level": 5, "mult": 1.15},
+    "ecu":          {"name": "Чип-тюнинг Stage", "emoji": "💻", "max_level": 5, "mult": 0.9},
+    "body_kit":     {"name": "Аэро-обвес Black Series", "emoji": "🎨", "max_level": 5, "mult": 0.7},
 }
 
 
@@ -97,13 +103,19 @@ def _b(p=0, s=0, a=0, h=0, w=0):
 
 
 UPGRADE_BONUSES = {
-    "engine":     [_b(5, 1), _b(10, 2), _b(16, 3), _b(22, 4), _b(30, 5)],
-    "turbo":      [_b(4, 2), _b(8, 4), _b(13, 6), _b(18, 8), _b(25, 10)],
-    "suspension": [_b(h=5, a=1), _b(h=10, a=2), _b(h=16, a=3), _b(h=22, a=4), _b(h=30, a=5)],
-    "tires":      [_b(h=3, a=3), _b(h=6, a=5), _b(h=10, a=8), _b(h=14, a=11), _b(h=18, a=15)],
-    "nitro":      [_b(a=5), _b(a=10), _b(a=16), _b(a=22), _b(a=30)],
-    "ecu":        [_b(3, 2, 1), _b(6, 4, 2), _b(10, 6, 3), _b(14, 8, 4), _b(18, 11, 5)],
-    "body_kit":   [_b(s=1, w=-2), _b(s=2, w=-4), _b(s=3, w=-6), _b(s=4, w=-9), _b(s=6, w=-12)],
+    "engine":       [_b(5, 1), _b(10, 2), _b(16, 3), _b(22, 4), _b(30, 5)],
+    "turbo":        [_b(4, 2), _b(8, 4), _b(13, 6), _b(18, 8), _b(25, 10)],
+    "exhaust":      [_b(p=4, s=2), _b(p=8, s=3), _b(p=12, s=5), _b(p=16, s=7), _b(p=22, s=9)],
+    "transmission": [_b(a=4, s=1), _b(a=8, s=2), _b(a=13, s=4), _b(a=18, s=6), _b(a=24, s=8)],
+    "suspension":   [_b(h=5, a=1), _b(h=10, a=2), _b(h=16, a=3), _b(h=22, a=4), _b(h=30, a=5)],
+    "brakes":       [_b(h=4, a=2), _b(h=8, a=4), _b(h=14, a=6), _b(h=20, a=8), _b(h=28, a=10)],
+    "tires":        [_b(h=3, a=3), _b(h=6, a=5), _b(h=10, a=8), _b(h=14, a=11), _b(h=18, a=15)],
+    "intercooler":  [_b(p=3, s=2), _b(p=6, s=4), _b(p=10, s=6), _b(p=14, s=8), _b(p=18, s=10)],
+    "intake":       [_b(p=2, a=2), _b(p=5, a=4), _b(p=8, a=6), _b(p=12, a=8), _b(p=16, a=11)],
+    "downpipe":     [_b(p=4, a=2), _b(p=8, a=4), _b(p=12, a=6), _b(p=17, a=8), _b(p=22, a=11)],
+    "nitro":        [_b(a=5), _b(a=10), _b(a=16), _b(a=22), _b(a=30)],
+    "ecu":          [_b(3, 2, 1), _b(6, 4, 2), _b(10, 6, 3), _b(14, 8, 4), _b(18, 11, 5)],
+    "body_kit":     [_b(s=1, w=-2), _b(s=2, w=-4), _b(s=3, w=-6), _b(s=4, w=-9), _b(s=6, w=-12)],
 }
 
 ACHIEVEMENTS_DEF = {

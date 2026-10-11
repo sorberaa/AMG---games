@@ -831,7 +831,7 @@ async def cmd_royale(message: Message):
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton as Btn
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [Btn(text="🏎 Занять место на старте!", callback_data="royale:join")],
-        [Btn(text="🟢 СТАРТ ВЫБЫВАНИЯ (мин. 3)", callback_data="royale:start")],
+        [Btn(text="🟢 СТАРТ ВЫБЫВАНИЯ (мин. 2)", callback_data="royale:start")],
     ])
 
     gif_tag = f"<a href='{data.AMG_GIFS['race']}'>&#8205;</a>"

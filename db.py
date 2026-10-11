@@ -111,7 +111,10 @@ CREATE TABLE IF NOT EXISTS withdrawals (
 );
 """
 
-UPGRADE_COLUMNS = {"engine", "turbo", "suspension", "tires", "nitro", "ecu", "body_kit"}
+UPGRADE_COLUMNS = {
+    "engine", "turbo", "exhaust", "transmission", "suspension",
+    "brakes", "tires", "intercooler", "intake", "downpipe", "nitro", "ecu", "body_kit"
+}
 PLAYER_COLUMNS = {
     "username", "first_name", "level", "xp", "money", "coins", "coins_today", "coins_date",
     "reputation", "wins", "losses", "races_total", "pvp_wins", "daily_streak", "last_daily",
@@ -150,6 +153,16 @@ async def init_db() -> None:
         ]:
             try:
                 await db.execute(f"ALTER TABLE players ADD COLUMN {col} {typ}")
+            except Exception:
+                pass
+
+        # Миграция колонок тюнинга для player_cars
+        for u_col in [
+            "exhaust_level", "transmission_level", "brakes_level",
+            "intercooler_level", "intake_level", "downpipe_level"
+        ]:
+            try:
+                await db.execute(f"ALTER TABLE player_cars ADD COLUMN {u_col} INTEGER DEFAULT 0")
             except Exception:
                 pass
 
