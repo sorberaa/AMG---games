@@ -227,25 +227,23 @@ def simulate_race(
 
 def calc_rewards(level: int, race_type: str, mult: float = 1.0, won: bool = True, car_rating: int = 150) -> dict:
     """
-    Награды зависят от уровня, множителя противника И КЛАССА/РЕЙТИНГА ТАЧКИ (Аура тачки):
-    Базовая C180 (рейтинг ~140) дает обычный доход.
-    Топ спорткары и гиперкары (рейтинг 250 - 500+) дают в разы больше денег и монет!
+    Награды зависят от уровня, множителя противника и рейтинга тачки.
+    Валюта игры — исключительно монеты AMG 🪙!
     """
     aura_mult = max(0.8, car_rating / 160.0)
 
-    xp = (30 + level * 6) * mult
-    money = (600 + level * 160) * mult * aura_mult
+    xp = int((30 + level * 6) * mult)
+    coins = int((15 + level * 3) * mult * (aura_mult ** 0.8))
     rep = int((5 + level) * aura_mult)
-    coins = random.randint(8, 15) * mult * (aura_mult ** 0.8)
 
     if race_type == "pvp":
-        xp *= 1.3
-        money *= 1.5
-        coins *= 1.3
+        xp = int(xp * 1.3)
+        coins = int(coins * 1.5)
 
     if not won:
-        return {"xp": int(xp * 0.3), "money": int(money * 0.15), "rep": 0, "coins": random.randint(1, 3)}
-    return {"xp": int(xp), "money": int(money), "rep": int(rep), "coins": int(coins)}
+        loss_coins = max(2, int(coins * 0.2))
+        return {"xp": int(xp * 0.3), "coins": loss_coins, "rep": 0, "money": loss_coins}
+    return {"xp": xp, "coins": coins, "rep": rep, "money": coins}
 
 
 
@@ -257,6 +255,7 @@ def check_achievements(player: dict, cars: list, current: list, extra: set = Non
     keys = {c["car_key"] for c in cars}
     classes = {CAR_CATALOG[k]["cls"] for k in keys if k in CAR_CATALOG}
     full_tune = any(all(c.get(f"{u}_level", 0) >= d["max_level"] for u, d in UPGRADE_DEFS.items()) for c in cars)
+    player_coins = max(player.get("coins", 0), player.get("money", 0))
     cond = {
         "first_race": player["races_total"] >= 1,
         "first_win": player["wins"] >= 1,
@@ -271,7 +270,7 @@ def check_achievements(player: dict, cars: list, current: list, extra: set = Non
         "amg_one_owner": "amg_one" in keys,
         "level_10": player["level"] >= 10,
         "level_25": player["level"] >= 25,
-        "millionaire": player["money"] >= 1_000_000,
+        "millionaire": player_coins >= 10_000,
         "streak_7": player["daily_streak"] >= 7,
         "pvp_win": player.get("pvp_wins", 0) >= 1,
         "full_tune": full_tune,

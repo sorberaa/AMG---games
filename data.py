@@ -7,16 +7,16 @@ CAR_CLASS_EMOJIS = {"D": "🟢", "C": "🔵", "B": "🟡", "A": "🟠", "S": "�
 
 # Палитра фирменных цветов Mercedes-AMG
 CAR_COLORS = {
-    "red":    {"name": "Красный (Designo Cardinal)", "emoji": "🔴", "price": 15000},
-    "yellow": {"name": "Жёлтый (Solarbeam Yellow)",   "emoji": "🟡", "price": 20000},
-    "green":  {"name": "Зелёный (Green Hell Magno)",  "emoji": "🟢", "price": 30000},
-    "blue":   {"name": "Синий (Brilliant Blue)",      "emoji": "🔵", "price": 20000},
-    "purple": {"name": "Фиолетовый (Mystic Purple)",  "emoji": "🟣", "price": 25000},
-    "orange": {"name": "Оранжевый (Copper Orange)",   "emoji": "🟠", "price": 25000},
-    "black":  {"name": "Чёрный (Obsidian Black)",     "emoji": "⚫", "price": 15000},
-    "white":  {"name": "Белый (Polar White)",         "emoji": "⚪", "price": 10000},
-    "brown":  {"name": "Бронзовый (Citrine Brown)",   "emoji": "🟤", "price": 18000},
-    "grey":   {"name": "Матовый серый (Selenite Magno)", "emoji": "🔘", "price": 22000},
+    "red":    {"name": "Красный (Designo Cardinal)", "emoji": "🔴", "price": 150},
+    "yellow": {"name": "Жёлтый (Solarbeam Yellow)",   "emoji": "🟡", "price": 200},
+    "green":  {"name": "Зелёный (Green Hell Magno)",  "emoji": "🟢", "price": 300},
+    "blue":   {"name": "Синий (Brilliant Blue)",      "emoji": "🔵", "price": 200},
+    "purple": {"name": "Фиолетовый (Mystic Purple)",  "emoji": "🟣", "price": 250},
+    "orange": {"name": "Оранжевый (Copper Orange)",   "emoji": "🟠", "price": 250},
+    "black":  {"name": "Чёрный (Obsidian Black)",     "emoji": "⚫", "price": 150},
+    "white":  {"name": "Белый (Polar White)",         "emoji": "⚪", "price": 100},
+    "brown":  {"name": "Бронзовый (Citrine Brown)",   "emoji": "🟤", "price": 180},
+    "grey":   {"name": "Матовый серый (Selenite Magno)", "emoji": "🔘", "price": 220},
 }
 COLOR_PALETTE = ["🔴", "🟡", "🟢", "🔵", "🟣", "🟠", "⚫", "⚪", "🟤", "🔘"]
 
@@ -59,26 +59,26 @@ def _car(name, cls, emoji, price, lvl, power, speed, accel, handling, weight, de
 
 CAR_CATALOG = {
     "c180":    _car("Mercedes C180", "D", "🚗", 0, 1, 156, 230, 8.2, 50, 1500, "Скромный старт. Каждая легенда с чего-то начинала."),
-    "a35":     _car("Mercedes-AMG A35", "D", "🏎", 30000, 1, 306, 250, 4.7, 60, 1555, "Заряженный хэтч с полным приводом."),
-    "c43":     _car("Mercedes-AMG C43", "C", "🏎", 55000, 2, 390, 250, 4.7, 65, 1660, "Спокойный снаружи, злой внутри."),
-    "cla45":   _car("Mercedes-AMG CLA 45 S", "C", "🏎", 65000, 3, 421, 270, 4.0, 68, 1630, "Самый мощный серийный 2.0 турбо в мире."),
-    "e53":     _car("Mercedes-AMG E53", "B", "🏎", 120000, 4, 435, 270, 4.4, 70, 1880, "Гибридный бизнес-снаряд."),
-    "c63":     _car("Mercedes-AMG C63 S", "B", "🏎", 150000, 5, 510, 290, 3.9, 72, 1740, "Битурбо V8 и легендарный рёв."),
-    "g63":     _car("Mercedes-AMG G63", "B", "🚙", 180000, 5, 585, 220, 4.5, 45, 2560, "Гелик. Объяснения не нужны."),
-    "cls53":   _car("Mercedes-AMG CLS 53", "A", "🏎", 280000, 7, 435, 270, 4.3, 73, 1870, "Четырёхдверное купе с характером."),
-    "e63s":    _car("Mercedes-AMG E63 S", "A", "🏎", 300000, 8, 612, 300, 3.4, 75, 1960, "Седан, который рвёт суперкары."),
-    "gt53":    _car("Mercedes-AMG GT 53", "A", "🏎", 320000, 8, 435, 285, 4.1, 76, 1910, "Комфорт GT и скорость AMG."),
-    "gle63s":  _car("Mercedes-AMG GLE 63 S", "A", "🚙", 350000, 9, 612, 280, 3.8, 55, 2370, "Кроссовер-ракета."),
-    "s63":     _car("Mercedes-AMG S63", "A", "🏎", 400000, 10, 612, 290, 3.5, 68, 2150, "Роскошь на скорости 290."),
-    "amg_gt":  _car("Mercedes-AMG GT", "S", "🏎", 500000, 12, 585, 312, 3.6, 82, 1615, "Длинный капот, короткая корма, чистый драйв."),
-    "sl63":    _car("Mercedes-AMG SL 63", "S", "🏎", 550000, 12, 585, 315, 3.6, 80, 1790, "Родстер для тех, кто любит ветер."),
-    "amg_gts": _car("Mercedes-AMG GT S", "S", "🏎", 600000, 13, 522, 310, 3.7, 84, 1645, "Острая версия GT."),
-    "gt63s":   _car("Mercedes-AMG GT 63 S", "S", "🏎", 700000, 15, 639, 315, 3.2, 78, 2100, "Четыре двери, 639 сил."),
-    "gt63se":  _car("Mercedes-AMG GT 63 S E Performance", "S", "⚡", 850000, 16, 843, 316, 2.9, 80, 2280, "Гибридный монстр на 843 силы."),
-    "amg_gtr": _car("Mercedes-AMG GT R", "SS", "🏎", 1000000, 18, 585, 318, 3.6, 90, 1555, "Зелёный ад. Зверь с Нюрбургринга."),
-    "gtr_pro": _car("Mercedes-AMG GT R PRO", "SS", "🏎", 1200000, 20, 585, 318, 3.6, 95, 1500, "Трековая версия GT R."),
-    "gt_bs":   _car("Mercedes-AMG GT Black Series", "SS", "🏎", 1500000, 22, 730, 325, 3.2, 92, 1435, "Рекордсмен Нордшляйфе."),
-    "amg_one": _car("Mercedes-AMG ONE", "SS", "👑", 3000000, 25, 1063, 352, 2.9, 95, 1695, "Болид Формулы-1 с номерами."),
+    "a35":     _car("Mercedes-AMG A35", "D", "🏎", 300, 1, 306, 250, 4.7, 60, 1555, "Заряженный хэтч с полным приводом."),
+    "c43":     _car("Mercedes-AMG C43", "C", "🏎", 550, 2, 390, 250, 4.7, 65, 1660, "Спокойный снаружи, злой внутри."),
+    "cla45":   _car("Mercedes-AMG CLA 45 S", "C", "🏎", 650, 3, 421, 270, 4.0, 68, 1630, "Самый мощный серийный 2.0 турбо в мире."),
+    "e53":     _car("Mercedes-AMG E53", "B", "🏎", 1200, 4, 435, 270, 4.4, 70, 1880, "Гибридный бизнес-снаряд."),
+    "c63":     _car("Mercedes-AMG C63 S", "B", "🏎", 1500, 5, 510, 290, 3.9, 72, 1740, "Битурбо V8 и легендарный рёв."),
+    "g63":     _car("Mercedes-AMG G63", "B", "🚙", 1800, 5, 585, 220, 4.5, 45, 2560, "Гелик. Объяснения не нужны."),
+    "cls53":   _car("Mercedes-AMG CLS 53", "A", "🏎", 2800, 7, 435, 270, 4.3, 73, 1870, "Четырёхдверное купе с характером."),
+    "e63s":    _car("Mercedes-AMG E63 S", "A", "🏎", 3000, 8, 612, 300, 3.4, 75, 1960, "Седан, который рвёт суперкары."),
+    "gt53":    _car("Mercedes-AMG GT 53", "A", "🏎", 3200, 8, 435, 285, 4.1, 76, 1910, "Комфорт GT и скорость AMG."),
+    "gle63s":  _car("Mercedes-AMG GLE 63 S", "A", "🚙", 3500, 9, 612, 280, 3.8, 55, 2370, "Кроссовер-ракета."),
+    "s63":     _car("Mercedes-AMG S63", "A", "🏎", 4000, 10, 612, 290, 3.5, 68, 2150, "Роскошь на скорости 290."),
+    "amg_gt":  _car("Mercedes-AMG GT", "S", "🏎", 5000, 12, 585, 312, 3.6, 82, 1615, "Длинный капот, короткая корма, чистый драйв."),
+    "sl63":    _car("Mercedes-AMG SL 63", "S", "🏎", 5500, 12, 585, 315, 3.6, 80, 1790, "Родстер для тех, кто любит ветер."),
+    "amg_gts": _car("Mercedes-AMG GT S", "S", "🏎", 6000, 13, 522, 310, 3.7, 84, 1645, "Острая версия GT."),
+    "gt63s":   _car("Mercedes-AMG GT 63 S", "S", "🏎", 7000, 15, 639, 315, 3.2, 78, 2100, "Четыре двери, 639 сил."),
+    "gt63se":  _car("Mercedes-AMG GT 63 S E Performance", "S", "⚡", 8500, 16, 843, 316, 2.9, 80, 2280, "Гибридный монстр на 843 силы."),
+    "amg_gtr": _car("Mercedes-AMG GT R", "SS", "🏎", 10000, 18, 585, 318, 3.6, 90, 1555, "Зелёный ад. Зверь с Нюрбургринга."),
+    "gtr_pro": _car("Mercedes-AMG GT R PRO", "SS", "🏎", 12000, 20, 585, 318, 3.6, 95, 1500, "Трековая версия GT R."),
+    "gt_bs":   _car("Mercedes-AMG GT Black Series", "SS", "🏎", 15000, 22, 730, 325, 3.2, 92, 1435, "Рекордсмен Нордшляйфе."),
+    "amg_one": _car("Mercedes-AMG ONE", "SS", "👑", 30000, 25, 1063, 352, 2.9, 95, 1695, "Болид Формулы-1 с номерами."),
 }
 
 UPGRADE_DEFS = {
@@ -120,7 +120,7 @@ ACHIEVEMENTS_DEF = {
     "amg_one_owner": {"name": "Владелец ONE", "emoji": "👑", "description": "Получи Mercedes-AMG ONE"},
     "level_10":      {"name": "Опытный", "emoji": "📈", "description": "Достигни 10 уровня"},
     "level_25":      {"name": "Ветеран", "emoji": "🎖", "description": "Достигни 25 уровня"},
-    "millionaire":   {"name": "Миллионер", "emoji": "💰", "description": "Накопи $1,000,000"},
+    "millionaire":   {"name": "Казначей", "emoji": "💰", "description": "Накопи 10 000 монет"},
     "streak_7":      {"name": "Недельный стрик", "emoji": "📅", "description": "Заходи 7 дней подряд"},
     "pvp_win":       {"name": "Дуэлянт", "emoji": "⚔️", "description": "Выиграй PvP-дуэль"},
     "ghost_slayer":  {"name": "Охотник на призраков", "emoji": "👻", "description": "Обгони Призрака на AMG ONE"},
@@ -146,22 +146,22 @@ STREET_OPPONENTS = [
 DIFFICULTY_EMOJI = {"easy": "🟢", "medium": "🟡", "hard": "🔴", "extreme": "💀"}
 
 DAILY_REWARDS = [
-    {"money": 1000, "xp": 50, "coins": 20, "energy": 0, "bonus": None},
-    {"money": 1500, "xp": 75, "coins": 25, "energy": 0, "bonus": None},
-    {"money": 2500, "xp": 100, "coins": 30, "energy": 2, "bonus": "⚡ +2 энергии"},
-    {"money": 3500, "xp": 150, "coins": 35, "energy": 0, "bonus": None},
-    {"money": 5000, "xp": 200, "coins": 40, "energy": 5, "bonus": "⚡ +5 энергии"},
-    {"money": 7500, "xp": 300, "coins": 50, "energy": 0, "bonus": None},
-    {"money": 15000, "xp": 500, "coins": 80, "energy": 0, "bonus": "🎁 Бесплатный кейс"},
+    {"coins": 20, "xp": 50, "energy": 0, "bonus": None},
+    {"coins": 30, "xp": 75, "energy": 0, "bonus": None},
+    {"coins": 45, "xp": 100, "energy": 2, "bonus": "⚡ +2 энергии"},
+    {"coins": 60, "xp": 150, "energy": 0, "bonus": None},
+    {"coins": 80, "xp": 200, "energy": 5, "bonus": "⚡ +5 энергии"},
+    {"coins": 100, "xp": 300, "energy": 0, "bonus": None},
+    {"coins": 150, "xp": 500, "energy": 0, "bonus": "🎁 Бесплатный кейс"},
 ]
 
 # Магазин за монеты 🪙
 COIN_SHOP = {
     "energy_refill": {"name": "⚡ Полная энергия", "price": 60, "desc": "Восстанавливает энергию до максимума"},
-    "energy_plus":   {"name": "🔋 +1 к макс. энергии", "price": 400, "desc": "Навсегда +1 к максимуму (до 20)"},
-    "case_basic":    {"name": "📦 Обычный кейс", "price": 100, "desc": "Деньги, XP или машина класса D–B"},
+    "energy_plus":   {"name": "🔋 +1 к макс. энергии", "price": 400, "desc": "Навсегда +1 к максимуму (до 25)"},
+    "case_basic":    {"name": "📦 Обычный кейс", "price": 100, "desc": "Монеты, XP или машина класса D–B"},
     "case_elite":    {"name": "🎁 Элитный кейс", "price": 350, "desc": "Крупные призы и шанс на класс A–SS"},
-    "case_legendary":{"name": "👑 Легендарный ларец ONE", "price": 750, "desc": "Шанс выбить гиперкар AMG ONE и миллионы $"},
+    "case_legendary":{"name": "👑 Легендарный ларец ONE", "price": 750, "desc": "Шанс выбить гиперкар AMG ONE и тысячи монет"},
     "xp_boost":      {"name": "📈 +500 XP", "price": 120, "desc": "Мгновенно +500 опыта"},
     "insurance":     {"name": "🛡 Страховка AMG", "price": 150, "desc": "Защищает машину от аварии (спасет 1 раз)"},
     "chat_nitro":    {"name": "⚡ Нитро для чата", "price": 80, "desc": "+10% скорости во всех командных гонках чата на 24ч"},
@@ -173,19 +173,19 @@ CASES = {
         "name": "📦 Базовый сундук",
         "price": 100,
         "emoji": "📦",
-        "desc": "Деньги, опыт и шанс выбить машины классов D–B (A35, CLA 45 S, C63 S).",
+        "desc": "Монеты, опыт и шанс выбить машины классов D–B (A35, CLA 45 S, C63 S).",
     },
     "case_elite": {
         "name": "🎁 Элитный кейс AMG",
         "price": 350,
         "emoji": "🎁",
-        "desc": "Солидный куш до $250k, много XP и суперкары E63 S, AMG GT, GT R, Black Series.",
+        "desc": "Солидный куш монет, много XP и суперкары E63 S, AMG GT, GT R, Black Series.",
     },
     "case_legendary": {
         "name": "👑 Легендарный ларец ONE",
         "price": 750,
         "emoji": "👑",
-        "desc": "До $750k наличных, 3000 XP и шанс забрать гиперкары SS и сам Mercedes-AMG ONE!",
+        "desc": "До 2500 монет, 3000 XP и шанс забрать гиперкары SS и сам Mercedes-AMG ONE!",
     },
 }
 
@@ -217,8 +217,7 @@ BOSS_ROSTER = [
         "hp": 4500,
         "ability": "🛡 Бронебойный таран и дымовая завеса",
         "phrase": "«Мой V8 перемелет ваши легковушки в щебень!»",
-        "coins_pool": 250,
-        "money_pool": 100000,
+        "coins_pool": 300,
         "loot": "📦 Элитный кейс запчастей"
     },
     {
@@ -228,8 +227,7 @@ BOSS_ROSTER = [
         "hp": 6500,
         "ability": "⚡ Аэродинамический срыв F1 и уворот от тарана",
         "phrase": "«1063 лошадиные силы не оставляют вам и шанса!»",
-        "coins_pool": 400,
-        "money_pool": 250000,
+        "coins_pool": 600,
         "loot": "👑 Королевский трофей AMG ONE"
     },
     {
@@ -239,8 +237,7 @@ BOSS_ROSTER = [
         "hp": 5500,
         "ability": "🔥 Выброс пламени из выхлопа и ярость V8",
         "phrase": "«Посмотрим, чей битурбо сгорит первым в этой ночи!»",
-        "coins_pool": 320,
-        "money_pool": 180000,
+        "coins_pool": 450,
         "loot": "🎁 Кейс тюнинга и нитро"
     },
     {
@@ -250,21 +247,20 @@ BOSS_ROSTER = [
         "hp": 5000,
         "ability": "🔋 Электро-импульс 843 л.с. и регенерация бампера",
         "phrase": "«Гибридная мощь сотрёт вас с автобана!»",
-        "coins_pool": 280,
-        "money_pool": 140000,
+        "coins_pool": 400,
         "loot": "⚡ Запас супер-энергии"
     }
 ]
 
 # Колесо Фортуны AMG (призы и вероятности)
 WHEEL_PRIZES = [
-    {"type": "money", "val": 15000, "text": "💵 $15,000 наличных", "weight": 25},
-    {"type": "money", "val": 50000, "text": "💵 Крупный куш: $50,000!", "weight": 12},
-    {"type": "coins", "val": 30, "text": "🪙 30 золотых монет AMG", "weight": 20},
-    {"type": "coins", "val": 100, "text": "🪙 ДЖЕКПОТ: 100 золотых монет!", "weight": 5},
+    {"type": "coins", "val": 20, "text": "🪙 20 монет AMG", "weight": 25},
+    {"type": "coins", "val": 60, "text": "🪙 Крупный куш: 60 монет!", "weight": 12},
+    {"type": "coins", "val": 35, "text": "🪙 35 золотых монет AMG", "weight": 20},
+    {"type": "coins", "val": 150, "text": "🪙 ДЖЕКПОТ: 150 монет!", "weight": 5},
     {"type": "energy", "val": 5, "text": "⚡ +5 единиц энергии", "weight": 18},
     {"type": "xp", "val": 400, "text": "📈 +400 очков опыта гонщика", "weight": 15},
-    {"type": "fine", "val": 3000, "text": "👮 Штраф ДПС за тонировку (-$3,000) 😅", "weight": 5},
+    {"type": "fine", "val": 15, "text": "👮 Штраф ДПС за тонировку (-15 🪙) 😅", "weight": 5},
 ]
 
 # Сценарии приключений и похождений по автобану
@@ -278,21 +274,21 @@ ADVENTURE_SCENARIOS = [
                 "text": "📊 Заехать на диностенд и показать мощь",
                 "req_stat": "power",
                 "success_text": "Диностенд выдал запредельные показатели! Толпа в восторге, вам скинулись на призовой фонд!",
-                "win_money": 25000, "win_coins": 20, "win_xp": 150
+                "win_coins": 25, "win_xp": 150
             },
             {
                 "id": "drag402",
                 "text": "🚦 Принять вызов на быстрый спринт по рампе",
                 "req_stat": "acceleration",
                 "success_text": "Чистый старт на лаунч-контроле! Вы улетели вперёд, оставив соперника глотать пыль!",
-                "win_money": 35000, "win_coins": 25, "win_xp": 200
+                "win_coins": 35, "win_xp": 200
             },
             {
                 "id": "mechanic",
                 "text": "🔧 Подойти к подпольному механику AMG",
                 "req_stat": "any",
                 "success_text": "Механик уважительно оценил ваше авто и бесплатно подкрутил прошивку ECU!",
-                "win_money": 10000, "win_coins": 15, "win_xp": 250
+                "win_coins": 20, "win_xp": 250
             }
         ]
     },
@@ -305,14 +301,14 @@ ADVENTURE_SCENARIOS = [
                 "text": "💨 Педаль в пол: проверить максималку",
                 "req_stat": "speed",
                 "success_text": "Ваш AMG показал свой максимум! Колонна осталась далеко позади, вы король трассы!",
-                "win_money": 40000, "win_coins": 30, "win_xp": 220
+                "win_coins": 40, "win_xp": 220
             },
             {
                 "id": "corners",
                 "text": "↩️ Свернуть на извилистую развязку",
                 "req_stat": "handling",
                 "success_text": "Филигранное прохождение шпилек! Шасси отработало идеально, вам начислили очки стиля!",
-                "win_money": 30000, "win_coins": 20, "win_xp": 180
+                "win_coins": 30, "win_xp": 180
             }
         ]
     },
@@ -325,14 +321,14 @@ ADVENTURE_SCENARIOS = [
                 "text": "🚇 Срезать через ремонтный тоннель",
                 "req_stat": "handling",
                 "success_text": "Вы пролетели в сантиметрах от отбойников и оторвались в темноте тоннеля!",
-                "win_money": 45000, "win_coins": 35, "win_xp": 300
+                "win_coins": 45, "win_xp": 300
             },
             {
                 "id": "nitro_blast",
                 "text": "🔥 Врубить полный баллон нитро!",
                 "req_stat": "power",
                 "success_text": "Взрыв ускорения вжал вас в сиденье! Радары копов просто зашкалили!",
-                "win_money": 50000, "win_coins": 40, "win_xp": 280
+                "win_coins": 50, "win_xp": 280
             }
         ]
     }
@@ -340,16 +336,16 @@ ADVENTURE_SCENARIOS = [
 
 CASE_DROPS = {
     "case_basic": [  # (вес, тип, значение)
-        (40, "money", 5000), (25, "money", 15000), (20, "xp", 300),
-        (8, "car", "a35"), (4, "car", "cla45"), (2, "car", "c63"), (1, "money", 100000),
+        (40, "coins", 50), (25, "coins", 150), (20, "xp", 300),
+        (8, "car", "a35"), (4, "car", "cla45"), (2, "car", "c63"), (1, "coins", 1000),
     ],
     "case_elite": [
-        (35, "money", 50000), (20, "money", 120000), (15, "xp", 1500),
+        (35, "coins", 300), (20, "coins", 800), (15, "xp", 1500),
         (12, "car", "e63s"), (8, "car", "amg_gt"), (5, "car", "gt63s"),
         (3, "car", "amg_gtr"), (1.5, "car", "gt_bs"), (0.5, "car", "amg_one"),
     ],
     "case_legendary": [
-        (25, "money", 300000), (20, "money", 750000), (15, "xp", 3000),
+        (25, "coins", 1000), (20, "coins", 2500), (15, "xp", 3000),
         (12, "car", "gt63se"), (10, "car", "amg_gtr"), (8, "car", "gtr_pro"),
         (6, "car", "gt_bs"), (4, "car", "amg_one"),
     ],
@@ -375,9 +371,9 @@ def is_weakest_in_tier(car_key: str) -> bool:
 
 
 def get_upgrade_cost(car_price: int, upgrade_type: str, current_level: int) -> int:
-    base = car_price if car_price > 0 else 20000
+    base = car_price if car_price > 0 else 200
     mult = UPGRADE_DEFS[upgrade_type]["mult"]
-    return max(1000, int(base * 0.05 * (current_level + 1) * mult))
+    return max(10, int(base * 0.05 * (current_level + 1) * mult))
 
 
 def upgrade_investment(car_data: dict, player_car: dict) -> int:

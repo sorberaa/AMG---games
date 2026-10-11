@@ -26,7 +26,7 @@ async def team_only_redirect(event, is_callback: bool = False):
         "⚡ <b>В личке с ботом ты:</b>\n"
         "• 🚗 Настраиваешь, тюнингуешь и красишь болиды (/garage, /tuning)\n"
         "• 🧰 Открываешь сундуки и кейсы AMG (/cases)\n"
-        "• 🪙 Управляешь монетами и выводишь их (/cshop, /withdraw)\n"
+        "• 🪙 Управляешь монетами и бонусами (/cshop)\n"
         "• 🎁 Забираешь ежедневные подарки (/daily)\n"
         "• 👤 Смотришь профиль и статистику (/profile)\n\n"
         "🏁 <b>Все игры проводятся в команде!</b>\n"
@@ -81,7 +81,7 @@ async def cb_street(cb: CallbackQuery):
         status = "✅" if i < defeated else ("⚔️" if i == defeated else "🔒")
         lines.append(f"{status} {o['name']}: рейтинг {r}")
     await safe_edit(cb, f"🏎 <b>Уличные гонки (Лестница боссов)</b>\n\nТвой рейтинг: <b>{my}</b>\n\n" + "\n".join(lines) +
-                    "\n\n<i>Побеждай по порядку! Доход и монеты зависят от крутости твоей тачки.</i>", street_opponents_kb(defeated))
+                    "\n\n<i>Побеждай по порядку! Награды в монетах зависят от крутости твоей тачки.</i>", street_opponents_kb(defeated))
 
 
 @router.callback_query(F.data.startswith("race_street_locked:"))
@@ -95,12 +95,11 @@ async def apply_result(uid: int, car_id: int, won: bool, race_type: str, mult: f
     await db.car_race_result(car_id, won)
     await db.increment(uid, races_total=1, wins=int(won), losses=int(not won), reputation=r["rep"],
                        pvp_wins=int(won and race_type == "pvp"))
-    await db.add_money(uid, r["money"])
-    lvl, up = await db.add_xp(uid, r["xp"])
-    coins = await db.grant_coins(uid, r["coins"])
-    parts = [f"💰 +${fmt(r['money'])}", f"📈 +{r['xp']} XP"]
+    coins = r.get("coins", 0)
     if coins:
-        parts.append(f"🪙 +{coins}")
+        await db.add_coins(uid, coins, reason=f"Гонка ({race_type})")
+    lvl, up = await db.add_xp(uid, r["xp"])
+    parts = [f"🪙 +{coins} монет", f"📈 +{r['xp']} XP"]
     if r["rep"]:
         parts.append(f"⭐ +{r['rep']}")
     text = " · ".join(parts)
@@ -209,37 +208,20 @@ async def cb_pvp(cb: CallbackQuery, player: dict):
     await cb.answer()
     if cb.message.chat.type == "private":
         return await team_only_redirect(cb, is_callback=True)
-    await safe_edit(cb, f"⚔️ <b>Создать вызов</b>\n\n💰 Баланс: ${fmt(player['money'])}\n\n"
-                        "Выбери ставку. Она замораживается, победитель забирает банк.\n"
-                        "Вызов появится в этом чате — принять может любой.", pvp_bet_kb())
+    await safe_edit(cb, f"⚔️ <b>Создать вызов</b>\n\n🪙 Баланс: <b>{fmt(player['coins'])} монет</b>\n\n"
+                        "Выбери ставку в монетах. Она замораживается, победитель забирает банк.\n"
+                        "Вызов появится в этом чате — принять может любой участник.", pvp_bet_kb())
 
 
-async def create_challenge(message: Message, user, bet: int, bet_type: str = "money") -> str | None:
+async def create_challenge(message: Message, user, bet: int, bet_type: str = "coins") -> str | None:
     """Создаёт вызов. Возвращает текст ошибки или None при успехе."""
     uid = user.id
-    from datetime import datetime, timedelta
     p = await db.get_player(uid)
 
-    if bet_type == "coins":
-        if bet <= 0:
-            return "Ставка монетами должна быть больше 0!"
-        # Лимит 1 час на дуэль на монеты
-        if p.get("last_coin_duel"):
-            try:
-                last_dt = datetime.strptime(p["last_coin_duel"], "%Y-%m-%d %H:%M:%S")
-                diff = datetime.utcnow() - last_dt
-                if diff < timedelta(hours=1):
-                    rem_mins = int((timedelta(hours=1) - diff).total_seconds() // 60)
-                    return f"⏳ Лимит на гонки на монеты: 1 раз в час! Осталось подождать {rem_mins} мин."
-            except Exception:
-                pass
-        if not await db.spend_coins(uid, bet, reason="Ставка на PvP дуэль"):
-            return "Недостаточно монет 🪙 для ставки!"
-    else:
-        if bet < 0 or bet > MAX_BET:
-            return f"Ставка от 0 до ${fmt(MAX_BET)}"
-        if bet and not await db.spend_money(uid, bet):
-            return "Недостаточно денег для ставки!"
+    if bet < 0:
+        return "Ставка не может быть отрицательной!"
+    if bet and not await db.spend_coins(uid, bet, reason="Ставка на PvP дуэль"):
+        return f"Недостаточно монет 🪙 для ставки! У тебя: {fmt(p['coins'])} монет."
 
     pc = await db.get_selected_car(uid)
     if not pc:
@@ -248,14 +230,13 @@ async def create_challenge(message: Message, user, bet: int, bet_type: str = "mo
         return "У тебя уже 3 открытых вызова. Дождись соперников или отмени."
 
     race_id = await db.create_race(uid, pc["id"], bet, message.chat.id)
-    if bet_type == "coins":
-        async with db._connect() as _db:
-            await _db.execute("UPDATE races SET bet_type = 'coins' WHERE id = ?", (race_id,))
-            await _db.commit()
+    async with db._connect() as _db:
+        await _db.execute("UPDATE races SET bet_type = 'coins' WHERE id = ?", (race_id,))
+        await _db.commit()
 
     car = CAR_CATALOG[pc["car_key"]]
     rating = calc_stats(car, car_upgrades(pc))["rating"]
-    bet_t = f"🪙 Ставка: <b>{fmt(bet)} монет</b>" if bet_type == "coins" else (f"💵 Ставка: <b>${fmt(bet)}</b>" if bet else "🤝 Без ставки")
+    bet_t = f"🪙 Ставка: <b>{fmt(bet)} монет</b>" if bet else "🤝 Без ставки"
     await message.answer(
         f"⚔️ <b>ВЫЗОВ НА ДУЭЛЬ!</b>\n\n👤 {user.first_name} бросает вызов!\n"
         f"🚗 {car['emoji']} {car['name']} (рейтинг {rating})\n{bet_t}\n\nКто примет? 👇",
@@ -265,21 +246,6 @@ async def create_challenge(message: Message, user, bet: int, bet_type: str = "mo
 
 
 @router.callback_query(F.data.startswith("race_coin_bet:"))
-async def cb_coin_bet(cb: CallbackQuery):
-    if cb.message.chat.type == "private":
-        await cb.answer()
-        return await team_only_redirect(cb, is_callback=True)
-    try:
-        bet = int(cb.data.split(":")[1])
-    except ValueError:
-        return await cb.answer()
-    err = await create_challenge(cb.message, cb.from_user, bet, bet_type="coins")
-    if err:
-        return await cb.answer(err, show_alert=True)
-    await cb.answer("Вызов на монеты создан!")
-    await safe_edit(cb, "✅ Вызов на монеты опубликован ниже! Лимит: 1 раз в час.", back_kb("race"))
-
-
 @router.callback_query(F.data.startswith("race_pvp_bet:"))
 async def cb_pvp_bet(cb: CallbackQuery):
     if cb.message.chat.type == "private":
@@ -289,7 +255,7 @@ async def cb_pvp_bet(cb: CallbackQuery):
         bet = int(cb.data.split(":")[1])
     except ValueError:
         return await cb.answer()
-    err = await create_challenge(cb.message, cb.from_user, bet, bet_type="money")
+    err = await create_challenge(cb.message, cb.from_user, bet, bet_type="coins")
     if err:
         return await cb.answer(err, show_alert=True)
     await cb.answer("Вызов создан!")
@@ -301,16 +267,12 @@ async def cmd_duel(message: Message, command: CommandObject):
     if message.chat.type == "private":
         return await team_only_redirect(message, is_callback=False)
     bet = 0
-    bet_type = "money"
     if command.args:
-        args_lower = command.args.lower()
-        if "монет" in args_lower or "coin" in args_lower or "🪙" in args_lower:
-            bet_type = "coins"
         try:
             bet = int("".join(c for c in command.args if c.isdigit()))
         except ValueError:
-            return await message.answer("Формат: <code>/duel 5000</code> или <code>/duel 50 монет</code>")
-    err = await create_challenge(message, message.from_user, bet, bet_type=bet_type)
+            return await message.answer("Формат: <code>/duel 50</code> (ставка в монетах)")
+    err = await create_challenge(message, message.from_user, bet, bet_type="coins")
     if err:
         await message.answer(f"❌ {err}")
 
@@ -335,10 +297,7 @@ async def cb_pvp_cancel(cb: CallbackQuery):
     if not await db.cancel_race(race["id"]):
         return await cb.answer("Вызов уже неактивен", show_alert=True)
     if race["bet"]:
-        if race.get("bet_type") == "coins":
-            await db.add_coins_admin(race["challenger_id"], race["bet"], reason="Возврат отмены дуэли")
-        else:
-            await db.add_money(race["challenger_id"], race["bet"])
+        await db.add_coins(race["challenger_id"], race["bet"], reason="Возврат отмены дуэли")
     await cb.answer("Вызов отменён, ставка возвращена")
     await safe_edit(cb, "❌ Вызов отменён автором.")
 
@@ -346,7 +305,6 @@ async def cb_pvp_cancel(cb: CallbackQuery):
 @router.callback_query(F.data.startswith("race_accept:"))
 async def cb_pvp_accept(cb: CallbackQuery):
     uid = cb.from_user.id
-    from datetime import datetime, timedelta
     race = await db.get_race(int(cb.data.split(":")[1]))
     if not race or race["status"] != "pending":
         return await cb.answer("Вызов уже неактивен", show_alert=True)
@@ -359,34 +317,15 @@ async def cb_pvp_accept(cb: CallbackQuery):
         return await cb.answer("⚡ Нет энергии!", show_alert=True)
 
     bet = race["bet"]
-    is_coins = race.get("bet_type") == "coins"
     p2 = await db.get_player(uid)
 
-    if is_coins:
-        if p2.get("last_coin_duel"):
-            try:
-                last_dt = datetime.strptime(p2["last_coin_duel"], "%Y-%m-%d %H:%M:%S")
-                diff = datetime.utcnow() - last_dt
-                if diff < timedelta(hours=1):
-                    rem_mins = int((timedelta(hours=1) - diff).total_seconds() // 60)
-                    await db.increment(uid, energy=1)
-                    return await cb.answer(f"⏳ Твой лимит на гонки на монеты: подожди {rem_mins} мин.", show_alert=True)
-            except Exception:
-                pass
-        if not await db.spend_coins(uid, bet, reason="Принятие дуэли на монеты"):
-            await db.increment(uid, energy=1)
-            return await cb.answer(f"Нужно {fmt(bet)} монет 🪙 для ставки!", show_alert=True)
-    else:
-        if bet and not await db.spend_money(uid, bet):
-            await db.increment(uid, energy=1)
-            return await cb.answer(f"Нужно ${fmt(bet)} для ставки!", show_alert=True)
+    if bet and not await db.spend_coins(uid, bet, reason="Принятие дуэли"):
+        await db.increment(uid, energy=1)
+        return await cb.answer(f"Нужно {fmt(bet)} монет 🪙 для ставки!", show_alert=True)
 
     if not await db.lock_race(race["id"], uid, pc2["id"]):
         if bet:
-            if is_coins:
-                await db.add_coins_admin(uid, bet, reason="Возврат не успел принять")
-            else:
-                await db.add_money(uid, bet)
+            await db.add_coins(uid, bet, reason="Возврат не успел принять")
         await db.increment(uid, energy=1)
         return await cb.answer("Кто-то принял вызов раньше тебя!", show_alert=True)
 
@@ -421,17 +360,11 @@ async def cb_pvp_accept(cb: CallbackQuery):
     loser_id = uid if winner_id == p1["user_id"] else p1["user_id"]
     await db.finish_race(race["id"], winner_id)
 
-    # Фиксируем кулдаун для монетной дуэли
-    if is_coins:
-        now_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        await db.update_player(p1["user_id"], last_coin_duel=now_time)
-        await db.update_player(uid, last_coin_duel=now_time)
-        await db.add_coins_admin(winner_id, bet * 2, reason="Выигрыш в дуэли на монеты")
+    if bet:
+        await db.add_coins(winner_id, bet * 2, reason="Выигрыш в дуэли")
         bank = f"\n🪙 Банк: <b>{fmt(bet * 2)} монет</b> → {n1 if winner_id == p1['user_id'] else n2}"
     else:
-        if bet:
-            await db.add_money(winner_id, bet * 2)
-        bank = f"\n💵 Банк: <b>${fmt(bet * 2)}</b> → {n1 if winner_id == p1['user_id'] else n2}" if bet else ""
+        bank = ""
 
     s1 = calc_stats(c1, car_upgrades(pc1))
     s2 = calc_stats(c2, car_upgrades(pc2))

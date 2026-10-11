@@ -102,7 +102,7 @@ async def cb_sell(cb: CallbackQuery):
     await cb.answer()
     car = CAR_CATALOG[pc["car_key"]]
     price = get_sell_price(car, pc)
-    await safe_edit(cb, f"💰 Продать <b>{car['name']}</b> за <b>${fmt(price)}</b>?\n\n"
+    await safe_edit(cb, f"💰 Продать <b>{car['name']}</b> за <b>{fmt(price)} 🪙</b>?\n\n"
                         "<i>Салон выкупает за 60% цены + 40% вложений в тюнинг.</i>",
                     sell_confirm_kb(pc["id"], price))
 
@@ -118,13 +118,13 @@ async def cb_sell_yes(cb: CallbackQuery):
     car = CAR_CATALOG[pc["car_key"]]
     price = get_sell_price(car, pc)
     await db.remove_car(pc["id"])
-    await db.add_money(cb.from_user.id, price)
+    await db.add_coins(cb.from_user.id, price, reason=f"Продажа {car['name']}")
     p = await db.get_player(cb.from_user.id)
     if not p["selected_car_id"]:
         cars = await db.get_player_cars(cb.from_user.id)
         if cars:
             await db.select_car(cb.from_user.id, cars[0]["id"])
-    await cb.answer(f"Продано за ${fmt(price)}", show_alert=True)
+    await cb.answer(f"Продано за {fmt(price)} 🪙", show_alert=True)
     text, kb = await garage_view(cb.from_user.id)
     await safe_edit(cb, text, kb)
 
@@ -147,7 +147,7 @@ async def cb_car_paint(cb: CallbackQuery):
         f"{gif_tag}🎨 <b>Покрасочный цех AMG Performance Studio</b>\n\n"
         f"Автомобиль: {car['emoji']} <b>{car['name']}</b>\n"
         f"Текущий цвет: <b>{c_str}</b>\n"
-        f"💰 Твой баланс: <b>${fmt(p['money'])}</b>\n\n"
+        f"🪙 Твой баланс: <b>{fmt(p['coins'])} монет</b>\n\n"
         "Выбери цвет кузова! В гонках бот будет закреплять за тобой именно твой цвет болида:"
     )
     await safe_edit(cb, text, paint_shop_kb(pc["id"], c_key))
@@ -164,8 +164,8 @@ async def cb_car_paint_buy(cb: CallbackQuery):
 
     c_info = CAR_COLORS[color_key]
     price = c_info["price"]
-    if not await db.spend_money(cb.from_user.id, price):
-        return await cb.answer("Недостаточно денег для покраски! 💸", show_alert=True)
+    if not await db.spend_coins(cb.from_user.id, price, reason=f"Покраска {color_key}"):
+        return await cb.answer("Недостаточно монет для покраски! 🪙", show_alert=True)
 
     await db.paint_car(pc["id"], color_key)
     await cb.answer(f"✅ Автомобиль перекрашен в {c_info['name']}!", show_alert=True)
@@ -177,7 +177,7 @@ async def cb_car_paint_buy(cb: CallbackQuery):
         f"{gif_tag}🎨 <b>Покрасочный цех AMG Performance Studio</b>\n\n"
         f"Автомобиль: {car['emoji']} <b>{car['name']}</b>\n"
         f"Текущий цвет: <b>{c_info['emoji']} {c_info['name']}</b> ✅\n"
-        f"💰 Твой баланс: <b>${fmt(p['money'])}</b>\n\n"
+        f"🪙 Твой баланс: <b>{fmt(p['coins'])} монет</b>\n\n"
         "Выбери цвет кузова! В гонках бот будет закреплять за тобой именно твой цвет болида:"
     )
     await safe_edit(cb, text, paint_shop_kb(updated_pc["id"], color_key))
@@ -190,8 +190,8 @@ async def tuning_view(cb: CallbackQuery, pc: dict):
     car = CAR_CATALOG[pc["car_key"]]
     st = calc_stats(car, car_upgrades(pc))
     text = (f"🔧 <b>Тюнинг-ателье</b>\n{car['emoji']} {car['name']}\n\n{stats_block(st)}\n\n"
-            f"💰 Баланс: ${fmt(p['money'])}\n\nВыбери узел для улучшения:")
-    await safe_edit(cb, text, tuning_kb(pc, p["money"]))
+            f"🪙 Баланс: <b>{fmt(p['coins'])} монет</b>\n\nВыбери узел для улучшения:")
+    await safe_edit(cb, text, tuning_kb(pc, p["coins"]))
 
 
 @router.callback_query(F.data == "tuning")
@@ -240,7 +240,7 @@ async def cb_upgrade(cb: CallbackQuery):
             diff.append(f"{n}: {fmt_s.format(old[k])} → <b>{fmt_s.format(new[k])}</b>")
     diff.append(f"📊 Рейтинг: {old['rating']} → <b>{new['rating']}</b>")
     await safe_edit(cb, f"{u['emoji']} <b>{u['name']}</b>: ур. {lvl} → {lvl + 1}\n\n" + "\n".join(diff) +
-                    f"\n\n💰 Стоимость: <b>${fmt(cost)}</b>", upgrade_confirm_kb(pc["id"], key, cost))
+                    f"\n\n🪙 Стоимость: <b>{fmt(cost)} монет</b>", upgrade_confirm_kb(pc["id"], key, cost))
 
 
 @router.callback_query(F.data.startswith("upgrade_yes:"))
@@ -254,8 +254,8 @@ async def cb_upgrade_yes(cb: CallbackQuery):
         await cb.answer("Уже на максимуме!", show_alert=True)
         return
     cost = get_upgrade_cost(CAR_CATALOG[pc["car_key"]]["price"], key, lvl)
-    if not await db.spend_money(cb.from_user.id, cost):
-        await cb.answer("Недостаточно денег! 💸", show_alert=True)
+    if not await db.spend_coins(cb.from_user.id, cost, reason=f"Тюнинг {key}"):
+        await cb.answer("Недостаточно монет! 🪙", show_alert=True)
         return
     await db.upgrade_car(pc["id"], key, lvl + 1)
     await cb.answer(f"✅ {UPGRADE_DEFS[key]['name']} улучшен до {lvl + 1} уровня!")

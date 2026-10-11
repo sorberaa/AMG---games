@@ -27,9 +27,9 @@ class Adm(StatesGroup):
 def main_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [Btn(text="📊 Статистика", callback_data="adm:stats"), Btn(text="🪙 Приход/Уход монет", callback_data="adm:coin_flow")],
-        [Btn(text="💳 Заявки на вывод", callback_data="adm:payouts"), Btn(text="🔎 Найти игрока", callback_data="adm:find")],
-        [Btn(text="👥 Игроки", callback_data="adm:players:0"), Btn(text="👑 Список админов", callback_data="adm:admins")],
-        [Btn(text="📢 Рассылка", callback_data="adm:broadcast"), Btn(text="✖️ Закрыть", callback_data="adm:close")],
+        [Btn(text="👥 Игроки", callback_data="adm:players:0"), Btn(text="🔎 Найти игрока", callback_data="adm:find")],
+        [Btn(text="👑 Список админов", callback_data="adm:admins"), Btn(text="📢 Рассылка", callback_data="adm:broadcast")],
+        [Btn(text="✖️ Закрыть", callback_data="adm:close")],
     ])
 
 
@@ -42,8 +42,6 @@ def player_kb(uid: int, p: dict) -> InlineKeyboardMarkup:
     adm = "👤 Снять админку" if p.get("is_admin") else "👑 Дать админку"
     ban = "✅ Разбанить" if p.get("is_banned") else "🚫 Забанить"
     return InlineKeyboardMarkup(inline_keyboard=[
-        [Btn(text="💰 +Деньги", callback_data=f"adm:act:money_add:{uid}"),
-         Btn(text="💸 −Деньги", callback_data=f"adm:act:money_sub:{uid}")],
         [Btn(text="🪙 +Монеты", callback_data=f"adm:act:coins_add:{uid}"),
          Btn(text="🪙 −Монеты", callback_data=f"adm:act:coins_sub:{uid}")],
         [Btn(text="🚗 Выдать авто", callback_data=f"adm:act:car:{uid}"),
@@ -210,7 +208,7 @@ async def show_stats(cb: CallbackQuery):
         f"🚫 Забанено: <b>{s['banned']}</b>\n📈 Средний уровень: <b>{s['avg_level']:.1f}</b>\n\n"
         f"🏁 Гонок всего: <b>{fmt(s['races'])}</b>\n⚔️ PvP-дуэлей: <b>{fmt(s['pvp'])}</b>\n"
         f"🚗 Машин в гаражах: <b>{fmt(s['cars'])}</b>\n\n"
-        f"💰 Денег в экономике: <b>${fmt(s['money'])}</b>\n🪙 Монет в экономике: <b>{fmt(s['coins'])}</b>\n"
+        f"🪙 Монет в экономике: <b>{fmt(s['coins'])}</b>\n"
         f"🪙 Монет добыто сегодня: <b>{fmt(s['coins_today'])}</b>\n\n🏆 <b>Топ по победам:</b>\n{top_t}"
     ), back_kb())
 
@@ -245,7 +243,7 @@ async def show_players(cb: CallbackQuery, page: int):
     rows = []
     for p in players[page * per:(page + 1) * per]:
         mark = ("🚫" if p["is_banned"] else "") + ("👑" if is_admin(p["user_id"]) else "")
-        rows.append([Btn(text=f"{mark}{p['first_name']} · ур.{p['level']} · ${fmt(p['money'])}",
+        rows.append([Btn(text=f"{mark}{p['first_name']} · ур.{p['level']} · {fmt(p['coins'])} 🪙",
                          callback_data=f"adm:p:{p['user_id']}")])
     nav = []
     if page > 0:
@@ -272,8 +270,8 @@ def player_card(p: dict, cars: list) -> str:
     return (
         f"👤 <b>{p['first_name']}</b> (@{p['username'] or '—'})\n"
         f"🆔 <code>{p['user_id']}</code>\n{role} · {status}{extra_status}\n\n"
-        f"📊 Уровень: {p['level']} ({p['xp']} XP)\n💰 Деньги: ${fmt(p['money'])}\n"
-        f"🪙 Монеты: {fmt(p['coins'])} (сегодня: {p['coins_today'] if p['coins_date'] else 0})\n"
+        f"📊 Уровень: {p['level']} ({p['xp']} XP)\n"
+        f"🪙 Баланс: {fmt(p['coins'])} монет (сегодня добыто: {p['coins_today'] if p['coins_date'] else 0})\n"
         f"⚡ Энергия: {p['energy']}/{p['max_energy']}\n⭐ Репутация: {p['reputation']}\n"
         f"🏁 Гонок: {p['races_total']} · 🏆 {p['wins']} · 💀 {p['losses']}\n"
         f"🔥 Стрик: {p['daily_streak']}\n📅 С нами с: {p['created_at'][:10]}\n\n"
@@ -375,8 +373,6 @@ async def toggle_ban(cb: CallbackQuery, uid: int):
 # ── Действия с вводом ────────────────────────────────────────
 
 PROMPTS = {
-    "money_add": "💰 Сколько денег <b>выдать</b>?",
-    "money_sub": "💸 Сколько денег <b>забрать</b>?",
     "coins_add": "🪙 Сколько монет <b>выдать</b>? (без дневного лимита)",
     "coins_sub": "🪙 Сколько монет <b>забрать</b>?",
     "level": "📈 Какой уровень установить? (1–100)",
@@ -419,16 +415,12 @@ async def on_amount(message: Message, state: FSMContext):
     d = await state.get_data()
     uid, act = d["target"], d["act"]
     await state.clear()
-    if act == "money_add":
-        await db.add_money(uid, n)
-    elif act == "money_sub":
-        await db.add_money(uid, -n)
-    elif act == "coins_add":
-        await db.add_coins_admin(uid, n)
+    if act == "coins_add":
+        await db.add_coins_admin(uid, n, reason="Выдача администратором")
     elif act == "coins_sub":
-        await db.add_coins_admin(uid, -n)
+        await db.add_coins_admin(uid, -n, reason="Списание администратором")
     p = await db.get_player(uid)
-    await message.answer(f"✅ Готово. Теперь у {p['first_name']}: ${fmt(p['money'])} · {fmt(p['coins'])} 🪙",
+    await message.answer(f"✅ Готово. Теперь у {p['first_name']}: {fmt(p['coins'])} 🪙 монет",
                          reply_markup=card_kb(uid))
 
 
@@ -576,84 +568,3 @@ async def on_add_admin(message: Message, state: FSMContext):
 
 # ── Заявки на вывод (Админка) ─────────────────────────────────
 
-@router.callback_query(F.data == "adm:payouts")
-async def cb_adm_payouts(cb: CallbackQuery):
-    if not is_admin(cb.from_user.id):
-        return await cb.answer("Нет доступа", show_alert=True)
-    await cb.answer()
-    payouts = await db.get_pending_withdrawals(limit=15)
-    if not payouts:
-        return await safe_edit(
-            cb,
-            "💳 <b>Заявки на вывод монет</b>\n\n✅ Нет ожидающих заявок. Все выплаты обработаны!",
-            back_kb("adm:main")
-        )
-    lines = []
-    kb_rows = []
-    for p in payouts:
-        lines.append(
-            f"🆔 <b>#{p['id']}</b> | <b>{p['amount']} 🪙</b>\n"
-            f"👤 {p.get('first_name', 'Игрок')} (<code>{p['user_id']}</code>)\n"
-            f"💳 <code>{p['wallet_info']}</code>\n"
-            f"Команды: <code>/pay_done {p['id']}</code> | <code>/pay_reject {p['id']}</code>"
-        )
-        kb_rows.append([
-            Btn(text=f"✅ #{p['id']} Выплачено", callback_data=f"adm:pay_done:{p['id']}"),
-            Btn(text=f"❌ #{p['id']} Отклонить", callback_data=f"adm:pay_reject:{p['id']}")
-        ])
-    kb_rows.append([Btn(text="◀️ Назад в админку", callback_data="adm:main")])
-    await safe_edit(
-        cb,
-        "💳 <b>Ожидающие заявки на вывод:</b>\n\n" + "\n\n".join(lines),
-        InlineKeyboardMarkup(inline_keyboard=kb_rows)
-    )
-
-
-@router.callback_query(F.data.startswith("adm:pay_done:"))
-async def cb_adm_pay_done(cb: CallbackQuery):
-    if not is_admin(cb.from_user.id):
-        return await cb.answer("Нет доступа", show_alert=True)
-    w_id = int(cb.data.split(":")[2])
-    await db.update_withdrawal_status(w_id, "completed")
-    async with db._connect() as _db:
-        _db.row_factory = db.aiosqlite.Row
-        cur = await _db.execute("SELECT * FROM withdrawals WHERE id = ?", (w_id,))
-        row = await cur.fetchone()
-        if row:
-            try:
-                await cb.bot.send_message(
-                    row["user_id"],
-                    f"🎉 <b>ТВОЯ ЗАЯВКА НА ВЫВОД #{w_id} ВЫПЛАЧЕНА!</b>\n\n"
-                    f"Сумма: <b>{row['amount']} 🪙</b>\n"
-                    f"Реквизиты: <code>{row['wallet_info']}</code>\n\n"
-                    "Спасибо за игру в AMG Racing! Ждём на новых заездах! 🏎💨"
-                )
-            except Exception:
-                pass
-    await cb.answer(f"✅ Заявка #{w_id} отмечена как выплаченная!", show_alert=True)
-    await cb_adm_payouts(cb)
-
-
-@router.callback_query(F.data.startswith("adm:pay_reject:"))
-async def cb_adm_pay_reject(cb: CallbackQuery):
-    if not is_admin(cb.from_user.id):
-        return await cb.answer("Нет доступа", show_alert=True)
-    w_id = int(cb.data.split(":")[2])
-    async with db._connect() as _db:
-        _db.row_factory = db.aiosqlite.Row
-        cur = await _db.execute("SELECT * FROM withdrawals WHERE id = ?", (w_id,))
-        row = await cur.fetchone()
-        if row and row["status"] == "pending":
-            await db.add_coins_admin(row["user_id"], row["amount"], reason=f"Возврат отклоненного вывода #{w_id}")
-            await db.update_withdrawal_status(w_id, "rejected")
-            try:
-                await cb.bot.send_message(
-                    row["user_id"],
-                    f"❌ <b>Заявка на вывод #{w_id} отклонена администратором.</b>\n\n"
-                    f"Монеты ({row['amount']} 🪙) возвращены на твой баланс.\n"
-                    "Проверь корректность реквизитов и создай заявку повторно."
-                )
-            except Exception:
-                pass
-    await cb.answer(f"❌ Заявка #{w_id} отклонена, монеты возвращены игроку", show_alert=True)
-    await cb_adm_payouts(cb)

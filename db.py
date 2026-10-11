@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS players (
     first_name TEXT,
     level INTEGER DEFAULT 1,
     xp INTEGER DEFAULT 0,
-    money INTEGER DEFAULT 50000,
-    coins INTEGER DEFAULT 0,
+    money INTEGER DEFAULT 500,
+    coins INTEGER DEFAULT 500,
     coins_today INTEGER DEFAULT 0,
     coins_date TEXT DEFAULT NULL,
     reputation INTEGER DEFAULT 0,
@@ -193,8 +193,8 @@ async def get_player_by_username(username: str):
 async def create_player(user_id: int, username, first_name: str) -> dict:
     async with _connect() as db:
         await db.execute(
-            "INSERT OR IGNORE INTO players (user_id, username, first_name, last_energy_update) "
-            "VALUES (?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO players (user_id, username, first_name, money, coins, last_energy_update) "
+            "VALUES (?, ?, ?, 500, 500, ?)",
             (user_id, username, first_name, now_str()),
         )
         await db.commit()
@@ -222,22 +222,6 @@ async def increment(user_id: int, **kwargs) -> None:
         await db.commit()
 
 
-async def add_money(user_id: int, amount: int) -> None:
-    async with _connect() as db:
-        await db.execute("UPDATE players SET money = MAX(0, money + ?) WHERE user_id = ?", (amount, user_id))
-        await db.commit()
-
-
-async def spend_money(user_id: int, amount: int) -> bool:
-    """Списывает деньги, только если хватает. Возвращает успех."""
-    async with _connect() as db:
-        cur = await db.execute(
-            "UPDATE players SET money = money - ? WHERE user_id = ? AND money >= ?", (amount, user_id, amount)
-        )
-        await db.commit()
-        return cur.rowcount > 0
-
-
 async def log_coin_tx(user_id: int, amount: int, reason: str):
     try:
         async with _connect() as db:
@@ -250,10 +234,28 @@ async def log_coin_tx(user_id: int, amount: int, reason: str):
         pass
 
 
+async def add_coins(user_id: int, amount: int, reason: str = "Награда") -> None:
+    """Единая функция начисления игровой валюты (монеты 🪙)."""
+    async with _connect() as db:
+        await db.execute(
+            "UPDATE players SET coins = MAX(0, coins + ?), money = MAX(0, money + ?) WHERE user_id = ?",
+            (amount, amount, user_id)
+        )
+        await db.commit()
+    if amount != 0:
+        await log_coin_tx(user_id, amount, reason)
+
+
+async def add_money(user_id: int, amount: int) -> None:
+    await add_coins(user_id, amount, reason="Награда")
+
+
 async def spend_coins(user_id: int, amount: int, reason: str = "Покупка") -> bool:
+    """Списывает монеты, только если хватает. Возвращает True/False."""
     async with _connect() as db:
         cur = await db.execute(
-            "UPDATE players SET coins = coins - ? WHERE user_id = ? AND coins >= ?", (amount, user_id, amount)
+            "UPDATE players SET coins = coins - ?, money = money - ? WHERE user_id = ? AND coins >= ?",
+            (amount, amount, user_id, amount)
         )
         await db.commit()
         ok = cur.rowcount > 0
@@ -262,51 +264,20 @@ async def spend_coins(user_id: int, amount: int, reason: str = "Покупка")
     return ok
 
 
+async def spend_money(user_id: int, amount: int) -> bool:
+    return await spend_coins(user_id, amount, reason="Покупка")
+
+
 async def add_coins_admin(user_id: int, amount: int, reason: str = "Выдача админом") -> None:
-    """Выдача монет админом — без лимитов."""
-    async with _connect() as db:
-        await db.execute("UPDATE players SET coins = MAX(0, coins + ?) WHERE user_id = ?", (amount, user_id))
-        await db.commit()
-    await log_coin_tx(user_id, amount, reason)
+    await add_coins(user_id, amount, reason=reason)
 
 
 async def grant_coins(user_id: int, base_amount: int, reason: str = "Награда за заезд") -> int:
-    """
-    Начисляет монеты с СКРЫТЫМ дневным лимитом (~500/день).
-    До COINS_SOFT_CAP — полная награда, затем награда плавно падает,
-    после COINS_HARD_CAP — изредка 0–1 монета. Игрок видит только итоговую цифру.
-    Возвращает фактически начисленное количество.
-    """
+    """Начисляет монеты игроку."""
     if base_amount <= 0:
         return 0
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    async with _connect() as db:
-        cur = await db.execute("SELECT coins_today, coins_date FROM players WHERE user_id = ?", (user_id,))
-        row = await cur.fetchone()
-        if not row:
-            return 0
-        earned, date = row
-        if date != today:
-            earned = 0
-
-        if earned < COINS_SOFT_CAP:
-            amount = min(base_amount, COINS_SOFT_CAP - earned) + max(
-                0, int((base_amount - (COINS_SOFT_CAP - earned)) * 0.5)
-            )
-        elif earned < COINS_HARD_CAP:
-            left = (COINS_HARD_CAP - earned) / (COINS_HARD_CAP - COINS_SOFT_CAP)
-            amount = max(1, int(base_amount * left * random.uniform(0.3, 0.6)))
-        else:
-            amount = 1 if random.random() < 0.25 else 0
-
-        await db.execute(
-            "UPDATE players SET coins = coins + ?, coins_today = ?, coins_date = ? WHERE user_id = ?",
-            (amount, earned + amount, today, user_id),
-        )
-        await db.commit()
-    if amount > 0:
-        await log_coin_tx(user_id, amount, reason)
-    return amount
+    await add_coins(user_id, base_amount, reason=reason)
+    return base_amount
 
 
 

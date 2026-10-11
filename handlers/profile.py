@@ -28,8 +28,7 @@ async def profile_text(uid: int) -> str:
     return (
         f"👤 <b>{p['first_name']}</b>\n\n"
         f"📊 Уровень <b>{p['level']}</b>\n{bar} {p['xp']}/{need} XP\n\n"
-        f"💰 Деньги: <b>${fmt(p['money'])}</b>\n"
-        f"🪙 Монеты: <b>{fmt(p['coins'])}</b>\n"
+        f"🪙 Баланс: <b>{fmt(p['coins'])} монет</b>\n"
         f"{ins_t}{wrap_t}\n"
         f"⚡ Энергия: {p['energy']}/{p['max_energy']}\n"
         f"⭐ Репутация: {p['reputation']}\n\n"
@@ -64,8 +63,8 @@ async def cb_ach(cb: CallbackQuery):
 
 # ── Топ ──────────────────────────────────────────────────────
 
-TOP_LABELS = {"wins": ("🏆", "побед"), "money": ("💰", "$"), "level": ("📈", "ур."),
-              "reputation": ("⭐", "реп."), "coins": ("🪙", "монет")}
+TOP_LABELS = {"wins": ("🏆", "побед"), "coins": ("🪙", "монет"), "level": ("📈", "ур."),
+              "reputation": ("⭐", "реп.")}
 
 
 async def top_text(sort: str) -> str:
@@ -123,7 +122,7 @@ async def daily_view(uid: int):
         days.append("🟩" if d < cur else "🎁" if d == cur else "⬜")
     bonus = f"\n{r['bonus']}" if r["bonus"] else ""
     return (f"🎁 <b>Бонус дня</b>\n\n{''.join(days)}\nДень {(streak - 1) % 7 + 1} из 7 · стрик {streak}\n\n"
-            f"💰 ${fmt(r['money'])}\n📈 {r['xp']} XP\n🪙 ~{r['coins']} монет{bonus}\n\n"
+            f"🪙 {r['coins']} монет\n📈 {r['xp']} XP{bonus}\n\n"
             "<i>Не пропускай дни — награда растёт!</i>"), daily_kb()
 
 
@@ -149,9 +148,8 @@ async def cb_daily_claim(cb: CallbackQuery):
     streak = _next_streak(p)
     await db.update_player(uid, last_daily=_today(), daily_streak=streak)
     r = get_daily_reward(streak)
-    await db.add_money(uid, r["money"])
     lvl, up = await db.add_xp(uid, r["xp"])
-    coins = await db.grant_coins(uid, r["coins"])
+    coins = await db.grant_coins(uid, r["coins"], reason="Бонус дня")
     extra = []
     if r["energy"]:
         await db.regen_energy(uid)
@@ -160,20 +158,18 @@ async def cb_daily_claim(cb: CallbackQuery):
     if r["bonus"] and "кейс" in r["bonus"]:
         from handlers.shop import roll_case
         _, kind, value = roll_case("case_basic")
-        if kind == "money":
-            await db.add_money(uid, value)
-            extra.append(f"📦 Кейс: ${fmt(value)}")
+        if kind == "coins" or kind == "money":
+            await db.add_coins(uid, value, reason="Кейс из бонуса дня")
+            extra.append(f"📦 Кейс: +{fmt(value)} 🪙")
         elif kind == "xp":
             await db.add_xp(uid, value)
-            extra.append(f"📦 Кейс: {value} XP")
+            extra.append(f"📦 Кейс: +{value} XP")
         else:
             await db.add_car(uid, value)
             extra.append(f"📦 Кейс: {CAR_CATALOG[value]['name']}!")
     await cb.answer("🎁 Награда получена!")
     ach = await award_achievements(uid)
-    lines = [f"💰 +${fmt(r['money'])}", f"📈 +{r['xp']} XP"]
-    if coins:
-        lines.append(f"🪙 +{coins}")
+    lines = [f"🪙 +{coins} монет", f"📈 +{r['xp']} XP"]
     lines += extra
     lvl_t = f"\n🆙 <b>Новый уровень: {lvl}!</b>" if up else ""
     await safe_edit(cb, f"🎁 <b>Бонус дня получен!</b>\n🔥 Стрик: {streak} дн.\n\n" + "\n".join(lines) + lvl_t + ach,
