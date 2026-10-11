@@ -1,3 +1,5 @@
+import asyncio
+import random
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import CallbackQuery, Message
@@ -50,8 +52,13 @@ async def race_menu_text(uid: int) -> str:
     rating = calc_stats(car, car_upgrades(pc))["rating"] if pc else 0
     wait = await db.minutes_to_next_energy(uid)
     regen = f"\n⏳ +1 ⚡ через {wait} мин" if wait else ""
-    return (f"🏁 <b>Гонки</b>\n\n🚗 {car['name'] if car else 'нет машины'} (рейтинг {rating})\n"
-            f"⚡ Энергия: <b>{energy}/{p['max_energy']}</b>{regen}\n\nВыбери режим:")
+    gif_tag = f"<a href='{data.AMG_GIFS['race']}'>&#8205;</a>"
+    return (
+        f"{gif_tag}🏁 <b>ГОНКИ И ЗАЕЗДЫ MERCEDES-AMG</b>\n\n"
+        f"🚗 Твой болид: <b>{car['name'] if car else 'не выбран'}</b> (Рейтинг: <b>{rating}</b>)\n"
+        f"⚡ Энергия: <b>{energy}/{p['max_energy']}</b>{regen} · 🪙 Баланс: <b>{fmt(p['coins'])} монет</b>\n\n"
+        "Выбери режим гонки или командного соревнования:"
+    )
 
 
 @router.message(Command("race"))
@@ -208,13 +215,192 @@ async def cb_solo_race_start(cb: CallbackQuery):
 
 
 
+# ── Режимы гонок (rmode:...) ─────────────────────────────────
+
+@router.callback_query(F.data.startswith("rmode:"))
+async def cb_race_mode(cb: CallbackQuery):
+    mode = cb.data.split(":")[1]
+    bot_info = await cb.bot.get_me()
+    is_group = (cb.message.chat.type != "private")
+    chat_id = cb.message.chat.id
+
+    if mode == "wheel":
+        await cb.answer()
+        gif_tag = f"<a href='{data.AMG_GIFS['wheel']}'>&#8205;</a>"
+        from kb import wheel_kb
+        return await safe_edit(
+            cb,
+            f"{gif_tag}🎰 <b>КОЛЕСО ФОРТУНЫ MERCEDES-AMG</b> 🎰\n\n"
+            "Испытай удачу на сходке стритрейсеров!\n"
+            "Каждый гонщик может крутить рулетку <b>1 раз в сутки бесплатно</b>.\n\n"
+            "🎁 <b>Возможные призы:</b>\n"
+            "• До <b>150 🪙 золотых монет</b>\n"
+            "• Дополнительная ⚡ энергия и 📈 опыт\n"
+            "• <i>(Осторожно: есть шанс нарваться на штраф от ДПС!)</i>\n\n"
+            "Жми кнопку ниже, чтобы запустить вращение! 👇",
+            wheel_kb()
+        )
+
+    if mode == "adv":
+        uid = cb.from_user.id
+        today = db.now_str()[:10]
+        adv_count = await db.get_cooldown(f"adv_cnt:{uid}:{today}")
+        if adv_count >= 3:
+            return await cb.answer("⏳ Ты уже совершил 3 выезда сегодня! Возвращайся завтра.", show_alert=True)
+        pc = await db.get_selected_car(uid)
+        if not pc:
+            return await cb.answer("Сначала выбери авто в гараже!", show_alert=True)
+        p = await db.get_player(uid)
+        if p["energy"] < 2:
+            return await cb.answer("⚡ Для выезда нужно 2 энергии!", show_alert=True)
+        await cb.answer()
+        sc_idx = random.randint(0, len(data.ADVENTURE_SCENARIOS) - 1)
+        scenario = data.ADVENTURE_SCENARIOS[sc_idx]
+        from handlers.group_games import ADVENTURE_STATES
+        ADVENTURE_STATES[uid] = sc_idx
+        from kb import adventure_choice_kb
+        gif_tag = f"<a href='{data.AMG_GIFS['autobahn']}'>&#8205;</a>"
+        car = CAR_CATALOG[pc["car_key"]]
+        return await safe_edit(
+            cb,
+            f"{gif_tag}🌃 <b>НОЧНОЙ ВЫЕЗД AMG: {scenario['title'].upper()}</b>\n\n"
+            f"🚗 Твой болид: <b>{car['name']}</b>\n"
+            f"📊 Поездка: <b>{int(adv_count) + 1}/3 за сегодня</b>\n\n"
+            f"📖 <i>{scenario['desc']}</i>\n\n"
+            f"<b>Сделай свой выбор:</b>",
+            adventure_choice_kb(sc_idx, scenario["choices"])
+        )
+
+    if is_group:
+        await cb.answer()
+        from handlers.group_games import (
+            start_tournament_recruitment, cmd_chase, cmd_boss, cmd_drag,
+            cmd_royale, cmd_airdrop, cmd_quiz
+        )
+        if mode == "chase":
+            return await cmd_chase(cb.message)
+        elif mode == "tourn":
+            return await start_tournament_recruitment(chat_id, cb.from_user.first_name, cb.message.answer)
+        elif mode == "boss":
+            return await cmd_boss(cb.message)
+        elif mode == "drag":
+            return await cmd_drag(cb.message)
+        elif mode == "royale":
+            return await cmd_royale(cb.message)
+        elif mode == "airdrop":
+            return await cmd_airdrop(cb.message)
+        elif mode == "quiz":
+            return await cmd_quiz(cb.message)
+
+    await cb.answer()
+    from aiogram.types import InlineKeyboardButton as Btn, InlineKeyboardMarkup
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="➕ Запустить в группе (добавить бота)", url=f"https://t.me/{bot_info.username}?startgroup=true")],
+        [Btn(text="◀️ Назад к гонкам", callback_data="race"),
+         Btn(text="🏠 Главное меню", callback_data="menu")],
+    ])
+
+    info_cards = {
+        "chase": (
+            data.AMG_GIFS["crash"],
+            "🚨 <b>ПОЛИЦЕЙСКАЯ ПОГОНЯ (/chase)</b>",
+            "Патрульные перекрыли квартал! Вся банда действует сообща:\n\n"
+            "• 💨 <b>Форсаж:</b> добавляет отрыв от погони\n"
+            "• 🛡 <b>Прикрытие:</b> сбивает тревогу полиции\n"
+            "• ↩️ <b>Вираж:</b> путает перехватчиков\n\n"
+            "⚡ <b>Без таймаутов:</b> можно уходить от погони нон-стоп!\n"
+            "💰 Награда каждому участнику: <b>монеты 🪙 и XP</b>!\n\n"
+            "<i>Запусти режим в командном чате кнопкой ниже или командой /chase!</i>"
+        ),
+        "tourn": (
+            data.AMG_GIFS["race"],
+            "🏆 <b>ГРАН-ПРИ ЧАТА (/tournament, /grouprace)</b>",
+            "Большой командный турнир от 2 участников!\n\n"
+            "• Все участники собираются на стартовой решетке\n"
+            "• Серия этапов с обгонами, динамическими сменами лидеров\n"
+            "• Призовой подиум с кубками, солидными монетами и славой!\n\n"
+            "<i>Запусти турнир в группе кнопкой ниже или командой /tournament!</i>"
+        ),
+        "boss": (
+            data.AMG_GIFS["boss"],
+            "👾 <b>РЕЙД НА БОССА АВТОБАНА (/boss)</b>",
+            "Командная битва против элитных боссов (Шеф на броне-Гелике, Призрак на AMG ONE)!\n\n"
+            "• Общее огромное здоровье (HP) босса на весь чат\n"
+            "• Тараньте и наносите нитро-удары x2.5 всей бандой\n"
+            "• Банк монет делится пропорционально урону!\n\n"
+            "<i>Запусти рейд в группе кнопкой ниже или командой /boss!</i>"
+        ),
+        "drag": (
+            data.AMG_GIFS["burnout"],
+            "🚦 <b>ДРАГ-РЕЙСИНГ 402М (/drag)</b>",
+            "Спринтерская дуэль двух гонщиков на 1/4 мили!\n\n"
+            "• Проверка моментальной реакции на стартовом светофоре\n"
+            "• Огромное значение имеют лошадиные силы и чип-тюнинг\n"
+            "• Фальстарт = поражение! Кто идеален на старте — побеждает!\n\n"
+            "<i>Запусти дуэль в группе кнопкой ниже или командой /drag!</i>"
+        ),
+        "royale": (
+            data.AMG_GIFS["race"],
+            "👑 <b>КОРОЛЕВСКАЯ БИТВА НА ВЫБЫВАНИЕ (/royale)</b>",
+            "Массовое состязание на выживание от 2+ пилотов!\n\n"
+            "• Каждый круг самый неудачливый участник выбывает\n"
+            "• Только один гонщик дойдет до финиша\n"
+            "• Победитель забирает джекпот: <b>+25 🪙 монет и +500 XP</b>!\n\n"
+            "<i>Запусти битву в группе кнопкой ниже или командой /royale!</i>"
+        ),
+        "airdrop": (
+            data.AMG_GIFS["boss"],
+            "📦 <b>АИРДРОП КОНТЕЙНЕРА AMG (/airdrop)</b>",
+            "В город сброшен контейнер с контрабандным грузом!\n\n"
+            "• Банда собирается для вскрытия тяжелого замка (мин. 2 участника)\n"
+            "• Топовый лут, монеты и детали распределяются между всеми, кто успел!\n\n"
+            "<i>Сбрось аирдроп в группу кнопкой ниже или командой /airdrop!</i>"
+        ),
+        "quiz": (
+            data.AMG_GIFS["welcome"],
+            "🧠 <b>АВТО-ВИКТОРИНА AMG (/quiz)</b>",
+            "Битва эрудитов и знатоков мира Mercedes-AMG!\n\n"
+            "• Уникальные вопросы об истории AMG, моторах V8 biturbo и легендах\n"
+            "• Доступна раз в 3 часа в чате\n"
+            "• Кто первый нажимает правильный ответ — мгновенно получает 🪙 монеты!\n\n"
+            "<i>Запусти викторину в группе кнопкой ниже или командой /quiz!</i>"
+        ),
+    }
+
+    card = info_cards.get(mode)
+    if not card:
+        return await safe_edit(cb, "Режим в разработке!", kb)
+
+    gif_url, title, desc = card
+    gif_tag = f"<a href='{gif_url}'>&#8205;</a>"
+    await safe_edit(cb, f"{gif_tag}{title}\n\n{desc}", kb)
+
+
 # ── PvP ──────────────────────────────────────────────────────
 
 @router.callback_query(F.data == "race_pvp")
 async def cb_pvp(cb: CallbackQuery, player: dict):
     await cb.answer()
     if cb.message.chat.type == "private":
-        return await team_only_redirect(cb, is_callback=True)
+        bot_info = await cb.bot.get_me()
+        from aiogram.types import InlineKeyboardButton as Btn, InlineKeyboardMarkup
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [Btn(text="➕ Создать дуэль в группе (добавить бота)", url=f"https://t.me/{bot_info.username}?startgroup=true")],
+            [Btn(text="📋 Открытые дуэли", callback_data="race_pvp_list")],
+            [Btn(text="◀️ Назад к гонкам", callback_data="race"),
+             Btn(text="🏠 Главное меню", callback_data="menu")],
+        ])
+        gif_tag = f"<a href='{data.AMG_GIFS['race']}'>&#8205;</a>"
+        return await safe_edit(
+            cb,
+            f"{gif_tag}⚔️ <b>ДУЭЛИ 1х1 СО СТАВКАМИ (/duel)</b>\n\n"
+            "Бросай персональный вызов любому участнику чата на монеты 🪙!\n\n"
+            "• Ставки от 0 до 100 монет\n"
+            "• Победитель забирает весь банк соперника\n"
+            "• Учитываются рейтинг авто, чип-тюнинг и тактика обгонов\n\n"
+            "<i>Добавь бота в командный чат или пиши /duel [ставка] в группе!</i>",
+            kb
+        )
     await safe_edit(cb, f"⚔️ <b>Создать вызов</b>\n\n🪙 Баланс: <b>{fmt(player['coins'])} монет</b>\n\n"
                         "Выбери ставку в монетах. Она замораживается, победитель забирает банк.\n"
                         "Вызов появится в этом чате — принять может любой участник.", pvp_bet_kb())

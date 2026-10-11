@@ -1055,24 +1055,11 @@ async def cb_royale_start(cb: CallbackQuery):
 @router.message(Command("wheel"))
 @router.message(Command("spin"))
 async def cmd_wheel(message: Message):
-    if message.chat.type == "private":
-        bot_info = await message.bot.get_me()
-        from aiogram.types import InlineKeyboardButton as Btn, InlineKeyboardMarkup
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [Btn(text="➕ Добавить бота в группу", url=f"https://t.me/{bot_info.username}?startgroup=true")],
-            [Btn(text="🏠 Меню", callback_data="menu")],
-        ])
-        return await message.answer(
-            "🎰 <b>Колесо Фортуны крутят на командных сходках в группе!</b>\n\n"
-            "Добавь бота в командный чат и пиши <code>/wheel</code> там!",
-            reply_markup=kb
-        )
-
     gif_tag = f"<a href='{data.AMG_GIFS['wheel']}'>&#8205;</a>"
     from kb import wheel_kb
     await message.answer(
         f"{gif_tag}🎰 <b>КОЛЕСО ФОРТУНЫ MERCEDES-AMG</b> 🎰\n\n"
-        "Испытай удачу на закрытой сходке стритрейсеров!\n"
+        "Испытай удачу на сходке стритрейсеров!\n"
         "Каждый гонщик может крутить рулетку <b>1 раз в сутки бесплатно</b>.\n\n"
         "🎁 <b>Возможные призы:</b>\n"
         "• До <b>150 🪙 золотых монет</b>\n"
@@ -1136,18 +1123,6 @@ ADVENTURE_STATES = {}  # user_id -> scenario_idx
 @router.message(Command("adventure"))
 @router.message(Command("trip"))
 async def cmd_adventure(message: Message):
-    if message.chat.type == "private":
-        bot_info = await message.bot.get_me()
-        from aiogram.types import InlineKeyboardButton as Btn, InlineKeyboardMarkup
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [Btn(text="➕ Добавить бота в группу", url=f"https://t.me/{bot_info.username}?startgroup=true")],
-            [Btn(text="🏠 Меню", callback_data="menu")],
-        ])
-        return await message.answer(
-            "🌃 <b>Ночные похождения банды проводятся в чатах команд!</b>\n\n"
-            "Добавь бота в свою группу и отправляйтесь в рейд: <code>/adventure</code>",
-            reply_markup=kb
-        )
 
     uid = message.from_user.id
     today = db.now_str()[:10]

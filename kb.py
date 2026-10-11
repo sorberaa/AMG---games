@@ -18,6 +18,8 @@ def main_menu_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     # Верхняя кнопка особой акции
     b.row(Btn(text="⚡ БАХНУТЬ СОЛИ (10 🪙)", callback_data="salt_boost"))
+    # Главная кнопка заездов и гонок
+    b.row(Btn(text="🏁 ГОНКИ И ЗАЕЗДЫ", callback_data="race"))
     for text, cb in [
         ("🚗 Гараж", "garage:0"),
         ("🔧 Тюнинг", "tuning"),
@@ -27,11 +29,11 @@ def main_menu_kb() -> InlineKeyboardMarkup:
         ("🎁 Бонус дня", "daily"),
         ("👤 Профиль", "profile"),
         ("🏆 Топ игроков", "top:wins"),
-        ("👥 Играть в группе 🏁", "group_info"),
+        ("👥 Командный режим", "group_info"),
         ("❓ Помощь", "help")
     ]:
         b.button(text=text, callback_data=cb)
-    b.adjust(1, 2, 2, 2, 2, 2)
+    b.adjust(1, 1, 2, 2, 2, 2, 2)
     return b.as_markup()
 
 
@@ -118,13 +120,33 @@ def buy_confirm_kb(car_key: str, cls: str, can_buy: bool) -> InlineKeyboardMarku
 
 
 def race_menu_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [Btn(text="🏎 Одиночный заезд 🎁", callback_data="race_solo")],
-        [Btn(text="🏆 Гран-при чата (от 2 игроков)", callback_data="tourn:create")],
-        [Btn(text="⚔️ Дуэль 1х1 в чате", callback_data="race_pvp")],
-        [Btn(text="📋 Открытые дуэли", callback_data="race_pvp_list")],
-        [Btn(text="🏠 Главное меню", callback_data="menu")],
-    ])
+    b = InlineKeyboardBuilder()
+    b.row(Btn(text="🏎 Одиночный заезд с подарками 🎁", callback_data="race_solo"))
+    b.row(
+        Btn(text="⚔️ Дуэль 1х1", callback_data="race_pvp"),
+        Btn(text="🏆 Гран-при турнир", callback_data="rmode:tourn")
+    )
+    b.row(
+        Btn(text="🚓 Погоня от полиции", callback_data="rmode:chase"),
+        Btn(text="👾 Рейд на босса", callback_data="rmode:boss")
+    )
+    b.row(
+        Btn(text="🚦 Драг-рейсинг 402м", callback_data="rmode:drag"),
+        Btn(text="👑 Выбывание Royale", callback_data="rmode:royale")
+    )
+    b.row(
+        Btn(text="📦 Аирдроп контейнер", callback_data="rmode:airdrop"),
+        Btn(text="🌃 Ночной выезд", callback_data="rmode:adv")
+    )
+    b.row(
+        Btn(text="🎰 Колесо Фортуны", callback_data="rmode:wheel"),
+        Btn(text="🧠 Викторина AMG", callback_data="rmode:quiz")
+    )
+    b.row(
+        Btn(text="📋 Открытые дуэли", callback_data="race_pvp_list"),
+        Btn(text="🏠 Главное меню", callback_data="menu")
+    )
+    return b.as_markup()
 
 
 def solo_race_kb() -> InlineKeyboardMarkup:
