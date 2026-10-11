@@ -12,13 +12,13 @@ from kb import boss_kb
 
 router = Router(name="group_games")
 
-BOSS_COOLDOWN = 30 * 60        # 30 минут
-QUIZ_COOLDOWN = 3 * 3600       # 3 часа строго
-AIRDROP_COOLDOWN = 30 * 60     # 30 минут
-CHASE_COOLDOWN = 25 * 60       # 25 минут
-TOURNAMENT_COOLDOWN = 15 * 60  # 15 минут
-ROYALE_COOLDOWN = 20 * 60      # 20 минут
-DRAG_COOLDOWN = 10 * 60        # 10 минут
+BOSS_COOLDOWN = 60        # 1 минута
+QUIZ_COOLDOWN = 3 * 3600  # 3 часа строго (защита от накрутки)
+AIRDROP_COOLDOWN = 60     # 1 минута
+CHASE_COOLDOWN = 0        # Без таймаутов!
+TOURNAMENT_COOLDOWN = 60  # 1 минута
+ROYALE_COOLDOWN = 60      # 1 минута
+DRAG_COOLDOWN = 30        # 30 секунд
 
 
 async def check_chat_cooldown(chat_id: int, game_key: str, cooldown_sec: int) -> tuple[bool, str]:
@@ -505,13 +505,6 @@ async def cmd_chase(message: Message):
     if chat_id in CHASES:
         return await message.answer("⚠️ Погоня уже идёт! Жмите кнопки действий.")
 
-    on_cd, rem_t = await check_chat_cooldown(chat_id, "chase", CHASE_COOLDOWN)
-    if on_cd:
-        return await message.answer(
-            f"⏳ <b>Банда уже уходила от погони недавно!</b>\n\n"
-            f"Полиция патрулирует улицы. Следующая вылазка через: <b>{rem_t}</b>."
-        )
-
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton as Btn
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [Btn(text="💨 Врубить форсаж!", callback_data="chase:nitro"),
@@ -535,6 +528,38 @@ async def cmd_chase(message: Message):
         "Дистанция отрыва: <b>100 / 250 м</b>\n"
         "Уровень тревоги: <b>15%</b>\n\n"
         "Координируйте действия кнопками ниже! 👇",
+        reply_markup=kb
+    )
+
+
+@router.callback_query(F.data == "chase:restart")
+async def cb_chase_restart(cb: CallbackQuery):
+    chat_id = cb.message.chat.id
+    if chat_id in CHASES:
+        return await cb.answer("Погоня уже идёт! Участвуйте!", show_alert=True)
+    await cb.answer("🚨 Новая облава! Погнали!")
+
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton as Btn
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="💨 Врубить форсаж!", callback_data="chase:nitro"),
+         Btn(text="🛡 Прикрыть хвост!", callback_data="chase:block")],
+        [Btn(text="↩️ Резкий вираж!", callback_data="chase:drift")],
+    ])
+
+    CHASES[chat_id] = {
+        "distance": 100,
+        "heat": 0,
+        "crew": set(),
+    }
+
+    gif_tag = f"<a href='{data.AMG_GIFS['crash']}'>&#8205;</a>"
+    await cb.message.answer(
+        f"{gif_tag}🚨 <b>НОВАЯ ПОЛИЦЕЙСКАЯ ПОГОНЯ!</b>\n\n"
+        f"Инициатор вылазки: <b>{cb.from_user.first_name}</b>\n\n"
+        "Вся банда снова в деле! Никаких задержек — уходим от перехватчиков:\n"
+        "Дистанция отрыва: <b>100 / 250 м</b>\n"
+        "Уровень тревоги: <b>15%</b>\n\n"
+        "Жмите кнопки! 👇",
         reply_markup=kb
     )
 
@@ -566,31 +591,37 @@ async def cb_chase_act(cb: CallbackQuery):
 
     await cb.answer()
 
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton as Btn
+    restart_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="🚨 Начать новую погоню!", callback_data="chase:restart")]
+    ])
+
     if ch["distance"] >= 250:
-        # Успешный побег
+        # Успешный побег (БЕЗ ТАЙМАУТОВ!)
         gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
         crew_count = len(ch["crew"])
         for u in ch["crew"]:
             await db.grant_coins(u, 12, reason="Успешный уход от погони")
             await db.add_xp(u, 150)
+        CHASES.pop(chat_id, None)
         await cb.message.edit_text(
             f"{gif_tag}🏆 <b>БАНДА УШЛА В ОТРЫВ!</b>\n\n"
             f"Полиция потеряла след в ночном городе! Все участники ({crew_count} чел.) "
-            "получили награды (монеты 🪙 и опыт XP)!"
+            "получили награды (монеты 🪙 и опыт XP)!\n\n"
+            "⚡ <i>Тайм-аутов нет — начинайте новую погоню кнопкой ниже или /chase!</i>",
+            reply_markup=restart_kb
         )
-        CHASES.pop(chat_id, None)
-        await db.set_cooldown(f"chase:{chat_id}", time.time())
     elif ch["heat"] >= 100:
-        # Провал
+        # Провал (БЕЗ ТАЙМАУТОВ!)
         gif_tag = f"<a href='{data.AMG_GIFS['crash']}'>&#8205;</a>"
+        CHASES.pop(chat_id, None)
         await cb.message.edit_text(
             f"{gif_tag}🚓 <b>ПЕРЕХВАТ! БАНДА ЗАБЛОКИРОВАНА!</b>\n\n"
-            "Полицейские выставили шипы и окружили колонну. Придется залечь на дно!"
+            "Полицейские выставили шипы и окружили колонну.\n\n"
+            "⚡ <i>Тайм-аутов нет — реванш доступен сразу кнопкой ниже или /chase!</i>",
+            reply_markup=restart_kb
         )
-        CHASES.pop(chat_id, None)
-        await db.set_cooldown(f"chase:{chat_id}", time.time())
     else:
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton as Btn
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [Btn(text="💨 Врубить форсаж!", callback_data="chase:nitro"),
              Btn(text="🛡 Прикрыть хвост!", callback_data="chase:block")],

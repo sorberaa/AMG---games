@@ -7,7 +7,11 @@ from data import (CAR_CATALOG, CAR_CLASSES, CAR_CLASS_EMOJIS, CAR_CLASS_NAMES, C
 
 
 def back_kb(cb: str = "menu", text: str = "◀️ Назад") -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[Btn(text=text, callback_data=cb)]])
+    if cb == "menu":
+        return InlineKeyboardMarkup(inline_keyboard=[[Btn(text="🏠 Главное меню", callback_data="menu")]])
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text=text, callback_data=cb), Btn(text="🏠 Главное меню", callback_data="menu")]
+    ])
 
 
 def main_menu_kb() -> InlineKeyboardMarkup:
@@ -47,7 +51,7 @@ def garage_kb(cars: list, selected_id: int, page: int = 0) -> InlineKeyboardMark
         nav.append(Btn(text="▶️", callback_data=f"garage:{page + 1}"))
     if nav:
         b.row(*nav)
-    b.row(Btn(text="🏠 Меню", callback_data="menu"))
+    b.row(Btn(text="🏠 Главное меню", callback_data="menu"))
     return b.as_markup()
 
 
@@ -57,8 +61,9 @@ def car_actions_kb(car_id: int, is_selected: bool) -> InlineKeyboardMarkup:
         rows.append([Btn(text="✅ Сделать основной", callback_data=f"car_select:{car_id}")])
     rows.append([Btn(text="🔧 Тюнинг", callback_data=f"tuning:{car_id}"),
                  Btn(text="🎨 Покраска", callback_data=f"car_paint:{car_id}")])
-    rows.append([Btn(text="💰 Продать", callback_data=f"car_sell:{car_id}"),
-                 Btn(text="◀️ В гараж", callback_data="garage:0")])
+    rows.append([Btn(text="💰 Продать", callback_data=f"car_sell:{car_id}")])
+    rows.append([Btn(text="🚗 В гараж", callback_data="garage:0"),
+                 Btn(text="🏠 Главное меню", callback_data="menu")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -68,15 +73,18 @@ def paint_shop_kb(car_id: int, current_color_key: str = None) -> InlineKeyboardM
         is_cur = (current_color_key == key)
         status = " (Установлен) ✅" if is_cur else f" — {fmt(c_info['price'])} 🪙"
         b.button(text=f"{c_info['emoji']} {c_info['name']}{status}", callback_data=f"car_paint_buy:{car_id}:{key}")
-    b.button(text="◀️ Назад к машине", callback_data=f"car:{car_id}")
     b.adjust(1)
+    b.row(Btn(text="◀️ К машине", callback_data=f"car:{car_id}"),
+          Btn(text="🚗 В гараж", callback_data="garage:0"))
+    b.row(Btn(text="🏠 Главное меню", callback_data="menu"))
     return b.as_markup()
 
 
 def sell_confirm_kb(car_id: int, price: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [Btn(text=f"✅ Продать за {fmt(price)} 🪙", callback_data=f"car_sell_yes:{car_id}")],
-        [Btn(text="❌ Отмена", callback_data=f"car:{car_id}")],
+        [Btn(text="❌ Отмена (к машине)", callback_data=f"car:{car_id}")],
+        [Btn(text="🚗 В гараж", callback_data="garage:0"), Btn(text="🏠 Главное меню", callback_data="menu")],
     ])
 
 
@@ -84,8 +92,8 @@ def shop_classes_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     for cls in CAR_CLASSES:
         b.button(text=f"{CAR_CLASS_EMOJIS[cls]} Класс {cls} — {CAR_CLASS_NAMES[cls]}", callback_data=f"shop_class:{cls}")
-    b.button(text="🏠 Меню", callback_data="menu")
     b.adjust(1)
+    b.row(Btn(text="🏠 Главное меню", callback_data="menu"))
     return b.as_markup()
 
 
@@ -94,8 +102,8 @@ def shop_list_kb(cars: list, level: int, owned: set) -> InlineKeyboardMarkup:
     for key, car in cars:
         mark = " ✅" if key in owned else (" 🔒" if level < car["level_req"] else "")
         b.button(text=f"{car['emoji']} {car['name']} — {fmt(car['price'])} 🪙{mark}", callback_data=f"shop_car:{key}")
-    b.button(text="◀️ К классам", callback_data="shop")
     b.adjust(1)
+    b.row(Btn(text="◀️ К классам", callback_data="shop"), Btn(text="🏠 Главное меню", callback_data="menu"))
     return b.as_markup()
 
 
@@ -103,7 +111,9 @@ def buy_confirm_kb(car_key: str, cls: str, can_buy: bool) -> InlineKeyboardMarku
     rows = []
     if can_buy:
         rows.append([Btn(text="✅ Купить", callback_data=f"buy_yes:{car_key}")])
-    rows.append([Btn(text="◀️ Назад", callback_data=f"shop_class:{cls}")])
+    rows.append([Btn(text="◀️ Назад к классу", callback_data=f"shop_class:{cls}"),
+                 Btn(text="🏪 К классам", callback_data="shop")])
+    rows.append([Btn(text="🏠 Главное меню", callback_data="menu")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -120,15 +130,16 @@ def race_menu_kb() -> InlineKeyboardMarkup:
 def solo_race_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [Btn(text="🟢 СТАРТ ЗАЕЗДА (-1 ⚡)", callback_data="race_solo_start")],
-        [Btn(text="◀️ Назад", callback_data="race")],
+        [Btn(text="◀️ Назад к гонкам", callback_data="race"),
+         Btn(text="🏠 Главное меню", callback_data="menu")],
     ])
 
 
 def solo_race_result_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [Btn(text="🔄 Ещё заезд (-1 ⚡)", callback_data="race_solo_start")],
-        [Btn(text="🏁 Все гонки", callback_data="race")],
-        [Btn(text="🏠 Меню", callback_data="menu")],
+        [Btn(text="🏁 Все гонки", callback_data="race"),
+         Btn(text="🏠 Главное меню", callback_data="menu")],
     ])
 
 
@@ -140,8 +151,8 @@ def pvp_bet_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     for amount in (0, 10, 25, 50, 100):
         b.button(text="🤝 Без ставки" if amount == 0 else f"🪙 {amount} монет", callback_data=f"race_pvp_bet:{amount}")
-    b.button(text="◀️ Назад", callback_data="race")
     b.adjust(2)
+    b.row(Btn(text="◀️ Назад к гонкам", callback_data="race"), Btn(text="🏠 Главное меню", callback_data="menu"))
     return b.as_markup()
 
 
@@ -194,8 +205,8 @@ def pvp_list_kb(races: list) -> InlineKeyboardMarkup:
     for r in races:
         bet = f"{fmt(r['bet'])} 🪙" if r["bet"] else "без ставки"
         b.button(text=f"⚔️ {r['challenger_name']} | {bet}", callback_data=f"race_accept:{r['id']}")
-    b.button(text="◀️ Назад", callback_data="race")
     b.adjust(1)
+    b.row(Btn(text="◀️ Назад к гонкам", callback_data="race"), Btn(text="🏠 Главное меню", callback_data="menu"))
     return b.as_markup()
 
 
@@ -204,7 +215,7 @@ def race_result_kb(opp_idx: int = None) -> InlineKeyboardMarkup:
         [Btn(text="🔄 Ещё заезд (-1 ⚡)", callback_data="race_solo_start")],
         [
             Btn(text="🏁 Все гонки", callback_data="race"),
-            Btn(text="🏠 Меню", callback_data="menu")
+            Btn(text="🏠 Главное меню", callback_data="menu")
         ]
     ])
 
@@ -221,22 +232,25 @@ def tuning_kb(player_car: dict, coins: int) -> InlineKeyboardMarkup:
             warn = "" if coins >= cost else " ❌"
             b.button(text=f"{u['emoji']} {u['name']} [{lvl}/{u['max_level']}] — {fmt(cost)} 🪙{warn}",
                      callback_data=f"upgrade:{player_car['id']}:{key}")
-    b.button(text="◀️ К машине", callback_data=f"car:{player_car['id']}")
     b.adjust(1)
+    b.row(Btn(text="◀️ К машине", callback_data=f"car:{player_car['id']}"),
+          Btn(text="🚗 В гараж", callback_data="garage:0"))
+    b.row(Btn(text="🏠 Главное меню", callback_data="menu"))
     return b.as_markup()
 
 
 def upgrade_confirm_kb(car_id: int, key: str, cost: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [Btn(text=f"✅ Улучшить за {fmt(cost)} 🪙", callback_data=f"upgrade_yes:{car_id}:{key}")],
-        [Btn(text="❌ Отмена", callback_data=f"tuning:{car_id}")],
+        [Btn(text="❌ Отмена (к тюнингу)", callback_data=f"tuning:{car_id}")],
+        [Btn(text="🚗 В гараж", callback_data="garage:0"), Btn(text="🏠 Главное меню", callback_data="menu")],
     ])
 
 
 def profile_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [Btn(text="🏅 Достижения", callback_data="profile_ach")],
-        [Btn(text="🏠 Меню", callback_data="menu")],
+        [Btn(text="🏠 Главное меню", callback_data="menu")],
     ])
 
 
@@ -245,15 +259,15 @@ def top_kb(current: str) -> InlineKeyboardMarkup:
     for key, text in [("wins", "🏆 Победы"), ("coins", "🪙 Монеты"), ("level", "📈 Уровень"),
                       ("reputation", "⭐ Репутация")]:
         b.button(text=("✅ " if key == current else "") + text, callback_data=f"top:{key}")
-    b.button(text="🏠 Меню", callback_data="menu")
     b.adjust(2)
+    b.row(Btn(text="🏠 Главное меню", callback_data="menu"))
     return b.as_markup()
 
 
 def daily_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [Btn(text="🎁 Забрать награду", callback_data="daily_claim")],
-        [Btn(text="🏠 Меню", callback_data="menu")],
+        [Btn(text="🏠 Главное меню", callback_data="menu")],
     ])
 
 
@@ -264,8 +278,8 @@ def coin_shop_kb() -> InlineKeyboardMarkup:
         if key.startswith("case_"):
             continue
         b.button(text=f"{item['name']} — {item['price']} 🪙", callback_data=f"cbuy:{key}")
-    b.button(text="🏠 Меню", callback_data="menu")
     b.adjust(1)
+    b.row(Btn(text="🏠 Главное меню", callback_data="menu"))
     return b.as_markup()
 
 
@@ -273,8 +287,7 @@ def cases_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     for key, c_info in CASES.items():
         b.button(text=f"{c_info['emoji']} {c_info['name']} — {c_info['price']} 🪙", callback_data=f"case_open:{key}")
-    b.button(text="🪙 Магазин монет", callback_data="cshop")
-    b.button(text="🏠 Меню", callback_data="menu")
     b.adjust(1)
+    b.row(Btn(text="🪙 Магазин монет", callback_data="cshop"), Btn(text="🏠 Главное меню", callback_data="menu"))
     return b.as_markup()
 

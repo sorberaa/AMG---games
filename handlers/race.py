@@ -21,7 +21,8 @@ async def team_only_redirect(event, is_callback: bool = False):
     from aiogram.types import InlineKeyboardButton as Btn, InlineKeyboardMarkup
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [Btn(text="➕ Добавить бота в группу / команду", url=f"https://t.me/{bot_info.username}?startgroup=true")],
-        [Btn(text="🏠 Главное меню", callback_data="menu")],
+        [Btn(text="◀️ Назад к гонкам", callback_data="race"),
+         Btn(text="🏠 Главное меню", callback_data="menu")],
     ])
     gif_tag = f"<a href='{data.AMG_GIFS['race']}'>&#8205;</a>"
     text = (

@@ -58,7 +58,7 @@ async def cb_ach(cb: CallbackQuery):
     lines = [f"{'✅' if k in have else '🔒'} {a['emoji']} <b>{a['name']}</b> — <i>{a['description']}</i>"
              for k, a in ACHIEVEMENTS_DEF.items()]
     await safe_edit(cb, f"🏅 <b>Достижения</b> ({len(have)}/{len(ACHIEVEMENTS_DEF)})\n\n" + "\n".join(lines),
-                    back_kb("profile"))
+                    back_kb("profile", "◀️ В профиль"))
 
 
 # ── Топ ──────────────────────────────────────────────────────
