@@ -114,21 +114,21 @@ async def execute_boss_strike(cb: CallbackQuery, is_nitro: bool = False):
             m = medals[i] if i < 3 else f"{i + 1}."
             lines.append(f"{m} <b>{d['first_name']}</b> — <b>{fmt(d['damage'])}</b> HP")
 
-        # Щедрые награды по местам
+        # Щедрые награды по местам (сбалансировано)
         for i, d in enumerate(damagers):
             target_uid = d["user_id"]
             if i == 0:
-                coins = 150
-                xp = 1500
+                coins = 35
+                xp = 1200
             elif i < 3:
-                coins = 90
-                xp = 800
-            elif i < 10:
-                coins = 45
-                xp = 400
-            else:
                 coins = 20
-                xp = 200
+                xp = 700
+            elif i < 10:
+                coins = 12
+                xp = 350
+            else:
+                coins = 6
+                xp = 150
 
             await db.add_coins_admin(target_uid, coins, reason=f"Победа над боссом {boss['boss_name']}")
             await db.add_xp(target_uid, xp)
@@ -416,21 +416,21 @@ async def cb_tourn_start(cb: CallbackQuery):
         m = medals[i] if i < 3 else f"{i + 1}."
         col = participant_colors.get(uid, "🏎")
         if i == 0:
-            await db.add_coins_admin(uid, 50, reason="1 место в Гран-при чата")
+            await db.add_coins_admin(uid, 20, reason="1 место в Гран-при чата")
             await db.add_xp(uid, 350)
-            reward_txt = " (+50 🪙, +350 XP)"
+            reward_txt = " (+20 🪙, +350 XP)"
         elif i == 1:
-            await db.add_coins_admin(uid, 25, reason="2 место в Гран-при чата")
+            await db.add_coins_admin(uid, 12, reason="2 место в Гран-при чата")
             await db.add_xp(uid, 200)
-            reward_txt = " (+25 🪙, +200 XP)"
+            reward_txt = " (+12 🪙, +200 XP)"
         elif i == 2:
-            await db.add_coins_admin(uid, 15, reason="3 место в Гран-при чата")
+            await db.add_coins_admin(uid, 7, reason="3 место в Гран-при чата")
             await db.add_xp(uid, 100)
-            reward_txt = " (+15 🪙, +100 XP)"
+            reward_txt = " (+7 🪙, +100 XP)"
         else:
-            await db.add_coins_admin(uid, 5, reason="Участие в Гран-при")
+            await db.add_coins_admin(uid, 3, reason="Участие в Гран-при")
             await db.add_xp(uid, 40)
-            reward_txt = " (+5 🪙, +40 XP)"
+            reward_txt = " (+3 🪙, +40 XP)"
 
         res_lines.append(f"{m} {col} <b>{name}</b> ({car_name}){reward_txt}")
 
@@ -523,12 +523,12 @@ async def cb_chase_act(cb: CallbackQuery):
         gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
         crew_count = len(ch["crew"])
         for u in ch["crew"]:
-            await db.add_coins_admin(u, 35, reason="Успешный уход от погони")
+            await db.add_coins_admin(u, 12, reason="Успешный уход от погони")
             await db.add_xp(u, 150)
         await cb.message.edit_text(
             f"{gif_tag}🏆 <b>БАНДА УШЛА В ОТРЫВ!</b>\n\n"
             f"Полиция потеряла след в ночном городе! Все участники ({crew_count} чел.) "
-            "получили по <b>+35 🪙 монет</b> и <b>+150 XP</b>!"
+            "получили по <b>+12 🪙 монет</b> и <b>+150 XP</b>!"
         )
         CHASES.pop(chat_id, None)
     elif ch["heat"] >= 100:
@@ -776,13 +776,13 @@ async def cb_drop_open(cb: CallbackQuery):
         name = dr["names"][uid]
         m = medals[i] if i < 3 else "📦"
         if i == 0:
-            coins, xp = 50, 300
+            coins, xp = 16, 300
         elif i == 1:
-            coins, xp = 30, 200
+            coins, xp = 10, 200
         elif i == 2:
-            coins, xp = 20, 150
+            coins, xp = 6, 150
         else:
-            coins, xp = 10, 80
+            coins, xp = 3, 80
 
         await db.add_coins_admin(uid, coins, reason="Аирдроп контейнера в чате")
         await db.add_xp(uid, xp)
@@ -839,7 +839,7 @@ async def cmd_royale(message: Message):
         f"{gif_tag}👑 <b>КОРОЛЕВСКАЯ БИТВА НА ВЫБЫВАНИЕ (ROYALE)!</b>\n\n"
         f"Организатор: <b>{message.from_user.first_name}</b>\n\n"
         "Правила просты: каждый круг самый неудачливый гонщик вылетает из гонки!\n"
-        "Выживает только один — <b>Король Автобана</b> забирает джекпот: <b>+80 🪙 монет</b>!\n\n"
+        "Выживает только один — <b>Король Автобана</b> забирает джекпот: <b>+25 🪙 монет</b>!\n\n"
         "Участников: <b>0</b>",
         reply_markup=kb
     )
@@ -921,7 +921,7 @@ async def cb_royale_start(cb: CallbackQuery):
     winner_car = CAR_CATALOG[ry["cars"][winner_id]["car_key"]]["name"]
 
     # Награда победителю
-    await db.add_coins_admin(winner_id, 80, reason="1 место в Royal Выбывании")
+    await db.add_coins_admin(winner_id, 25, reason="1 место в Royal Выбывании")
     await db.add_xp(winner_id, 500)
 
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
@@ -931,7 +931,7 @@ async def cb_royale_start(cb: CallbackQuery):
         f"<b>Хроника заезда:</b>\n{log_text}\n\n"
         f"🏆 <b>ЕДИНСТВЕННЫЙ ВЫЖИВШИЙ ЧЕМПИОН:</b>\n"
         f"🥇 <b>{winner_name}</b> на <b>{winner_car}</b>!\n\n"
-        f"💰 Награда победителя: <b>+80 🪙 монет</b> и <b>+500 XP</b>!\n"
+        f"💰 Награда победителя: <b>+25 🪙 монет</b> и <b>+500 XP</b>!\n"
         "Сыграть ещё: <code>/royale</code>"
     )
     ROYALES.pop(chat_id, None)
@@ -1230,7 +1230,7 @@ async def cb_drag_launch(cb: CallbackQuery):
     loser_name = drag["opponent_name"] if uid == drag["challenger_id"] else drag["challenger_name"]
 
     # Награда
-    await db.add_coins_admin(uid, 35, reason="Победа в Драг-рейсинге 402м")
+    await db.add_coins_admin(uid, 15, reason="Победа в Драг-рейсинге 402м")
     await db.add_xp(uid, 200)
 
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
@@ -1238,7 +1238,7 @@ async def cb_drag_launch(cb: CallbackQuery):
         f"{gif_tag}🏁 <b>ФИНИШ 402 МЕТРА! ПОБЕДА!</b>\n\n"
         f"🥇 <b>{winner_name}</b> показал молниеносную реакцию: <b>{reaction} сек</b>!\n"
         f"🥈 <i>{loser_name}</i> отстал на пол-корпуса.\n\n"
-        f"💰 Награда победителю: <b>+35 🪙 монет</b> и <b>+200 XP</b>!\n\n"
+        f"💰 Награда победителю: <b>+15 🪙 монет</b> и <b>+200 XP</b>!\n\n"
         "Сыграть ещё: <code>/drag</code>"
     )
     DRAG_RACES.pop(chat_id, None)

@@ -229,19 +229,22 @@ def calc_rewards(level: int, race_type: str, mult: float = 1.0, won: bool = True
     """
     Награды зависят от уровня, множителя противника и рейтинга тачки.
     Валюта игры — исключительно монеты AMG 🪙!
+    Сбалансировано под ~800–1200 монет в неделю (~120–170 в день).
     """
-    aura_mult = max(0.8, car_rating / 160.0)
+    aura_mult = max(0.85, min(1.3, car_rating / 160.0))
 
     xp = int((30 + level * 6) * mult)
-    coins = int((15 + level * 3) * mult * (aura_mult ** 0.8))
+    # За победу базово ~4–8 монет (в зависимости от уровня и рейтинга)
+    base_coins = 4.0 + min(6.0, level * 0.4)
+    coins = max(3, int(base_coins * mult * aura_mult))
     rep = int((5 + level) * aura_mult)
 
     if race_type == "pvp":
         xp = int(xp * 1.3)
-        coins = int(coins * 1.5)
+        coins = int(coins * 1.25)
 
     if not won:
-        loss_coins = max(2, int(coins * 0.2))
+        loss_coins = 1
         return {"xp": int(xp * 0.3), "coins": loss_coins, "rep": 0, "money": loss_coins}
     return {"xp": xp, "coins": coins, "rep": rep, "money": coins}
 
