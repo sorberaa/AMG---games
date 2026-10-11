@@ -135,18 +135,30 @@ async def cb_salt_boost(cb: CallbackQuery, player: dict):
     from utils import is_salt_boosted
     from aiogram.types import InlineKeyboardButton as Btn, InlineKeyboardMarkup
 
+    today = db.now_str()[:10]
+    used_today = (player.get("last_salt_boost_date") == today)
     active = is_salt_boosted(player)
     time_left = ""
     if active:
         try:
             exp = datetime.strptime(player["salt_boost_until"], db.TS_FMT)
             mins = max(1, int((exp - datetime.utcnow()).total_seconds() // 60))
-            time_left = f"\n\n⚡ <b>ЭФФЕКТ УЖЕ АКТИВЕН:</b> осталось <b>{mins} мин.</b> (+25% скорости)"
+            time_left = f"\n\n⚡ <b>ЭФФЕКТ СЕЙЧАС АКТИВЕН:</b> осталось <b>{mins} мин.</b> (+25% скорости)"
         except Exception:
             pass
 
+    if used_today and not active:
+        daily_note = "\n\n⏳ <b>ЛИМИТ:</b> Ты уже использовал допинг сегодня! Следующая порция будет доступна завтра."
+        action_btn = Btn(text="⏳ Использовано сегодня (1 раз в день)", callback_data="noop")
+    elif active:
+        daily_note = "\n\n⚡ <b>Действие в процессе!</b> Повторно бахнуть можно будет завтра."
+        action_btn = Btn(text="⚡ Действует прямо сейчас (+25%)", callback_data="noop")
+    else:
+        daily_note = "\n\n✨ <b>Доступно для активации:</b> 1 раз в сутки."
+        action_btn = Btn(text="💥 БАХНУТЬ СОЛИ (10 🪙)", callback_data="salt_boost:buy")
+
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [Btn(text="💥 БАХНУТЬ СОЛИ (10 🪙)", callback_data="salt_boost:buy")],
+        [action_btn],
         [Btn(text="🌐 Перейти на сайт amglive.to", url="https://amglive.to")],
         [Btn(text="◀️ В главное меню", callback_data="menu")],
     ])
@@ -159,9 +171,10 @@ async def cb_salt_boost(cb: CallbackQuery, player: dict):
         "⚡ <b>ЧТО ДАЁТ ЭТОТ БОНУС:</b>\n"
         "• 🚀 <b>+25% К МАКСИМАЛЬНОЙ СКОРОСТИ</b> во всех заездах и дуэлях!\n"
         "• ⏱ Длительность действия эффекта: <b>10 минут</b>\n"
+        "• 🔒 Ограничение: <b>строго 1 раз в день!</b>\n"
         "• 🌐 Доступ к закрытой платформе: <a href='https://amglive.to'>amglive.to</a>\n"
         "• 💰 Стоимость активации: всего <b>10 🪙 монет</b>\n\n"
-        "Опережай соперников на прямых и оставляй их далеко позади в клубах дыма!{time_left}",
+        "Опережай соперников на прямых и оставляй их далеко позади в клубах дыма!{time_left}{daily_note}",
         kb
     )
 
@@ -174,29 +187,28 @@ async def cb_salt_boost_buy(cb: CallbackQuery, player: dict):
 
     uid = cb.from_user.id
     cost = 10
+    today = db.now_str()[:10]
 
     p = await db.get_player(uid)
-    if not p or p["coins"] < cost:
+    if not p:
+        return await cb.answer("Игрок не найден", show_alert=True)
+
+    if p.get("last_salt_boost_date") == today:
+        return await cb.answer("⏳ Ты уже бахал соли сегодня! Допинг доступен только 1 раз в день.", show_alert=True)
+
+    if p["coins"] < cost:
         return await cb.answer(f"❌ Недостаточно монет! Нужно {cost} 🪙 монет.", show_alert=True)
 
     if not await db.spend_coins(uid, cost, reason="Бахнуть соли (+25% скорости)"):
         return await cb.answer("❌ Ошибка списания монет.", show_alert=True)
 
-    # Добавляем 10 минут (если уже был активен, продлеваем на 10 минут)
     now = datetime.utcnow()
-    if is_salt_boosted(p):
-        try:
-            curr_exp = datetime.strptime(p["salt_boost_until"], db.TS_FMT)
-            new_exp = curr_exp + timedelta(minutes=10)
-        except Exception:
-            new_exp = now + timedelta(minutes=10)
-    else:
-        new_exp = now + timedelta(minutes=10)
-
+    new_exp = now + timedelta(minutes=10)
     until_str = new_exp.strftime(db.TS_FMT)
-    await db.update_player(uid, salt_boost_until=until_str)
+
+    await db.update_player(uid, salt_boost_until=until_str, last_salt_boost_date=today)
     p_updated = await db.get_player(uid)
 
-    await cb.answer("💥 СОЛЬ ПРИНЯТА! +25% к скорости на 10 минут!", show_alert=True)
+    await cb.answer("💥 СОЛЬ ПРИНЯТА! +25% к скорости на 10 минут! (1 раз в день)", show_alert=True)
     await cb_salt_boost(cb, p_updated)
 
