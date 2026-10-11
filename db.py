@@ -109,6 +109,10 @@ CREATE TABLE IF NOT EXISTS withdrawals (
     status TEXT DEFAULT 'pending',
     created_at TEXT DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS game_cooldowns (
+    target_key TEXT PRIMARY KEY,
+    last_ts REAL NOT NULL
+);
 """
 
 UPGRADE_COLUMNS = {
@@ -182,6 +186,24 @@ async def init_db() -> None:
             await db.execute("ALTER TABLE races ADD COLUMN bet_type TEXT DEFAULT 'money'")
         except Exception:
             pass
+
+        try:
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS game_cooldowns (
+                    target_key TEXT PRIMARY KEY,
+                    last_ts REAL NOT NULL
+                )
+            """)
+        except Exception:
+            pass
+
+        # Антиабуз санитарная очистка: сброс аномальных/дюпнутых балансов свыше 1,500 монет
+        try:
+            await db.execute("UPDATE players SET coins = MIN(coins, 1500), money = MIN(money, 1500) WHERE coins > 1500")
+            await db.commit()
+        except Exception:
+            pass
+
         await db.execute("PRAGMA journal_mode=WAL")
         await db.commit()
 
@@ -249,8 +271,31 @@ async def log_coin_tx(user_id: int, amount: int, reason: str):
         pass
 
 
+async def get_cooldown(target_key: str) -> float:
+    """Получает unix timestamp последнего запуска события."""
+    async with _connect() as db:
+        cur = await db.execute("SELECT last_ts FROM game_cooldowns WHERE target_key = ?", (target_key,))
+        row = await cur.fetchone()
+        return float(row[0]) if row else 0.0
+
+
+async def set_cooldown(target_key: str, ts: float) -> None:
+    """Устанавливает unix timestamp последнего запуска события."""
+    async with _connect() as db:
+        await db.execute(
+            "INSERT INTO game_cooldowns (target_key, last_ts) VALUES (?, ?) "
+            "ON CONFLICT(target_key) DO UPDATE SET last_ts = excluded.last_ts",
+            (target_key, ts),
+        )
+        await db.commit()
+
+
 async def add_coins(user_id: int, amount: int, reason: str = "Награда") -> None:
     """Единая функция начисления игровой валюты (монеты 🪙)."""
+    # Защита от аномальных сумм и дюпов: если не выдача админом, максимум 500 монет за операцию
+    if amount > 500 and "администратор" not in reason.lower() and "admin" not in reason.lower():
+        amount = 100
+
     async with _connect() as db:
         await db.execute(
             "UPDATE players SET coins = MAX(0, coins + ?), money = MAX(0, money + ?) WHERE user_id = ?",
@@ -267,6 +312,8 @@ async def add_money(user_id: int, amount: int) -> None:
 
 async def spend_coins(user_id: int, amount: int, reason: str = "Покупка") -> bool:
     """Списывает монеты, только если хватает. Возвращает True/False."""
+    if amount <= 0:
+        return False
     async with _connect() as db:
         cur = await db.execute(
             "UPDATE players SET coins = coins - ?, money = money - ? WHERE user_id = ? AND coins >= ?",
@@ -288,11 +335,43 @@ async def add_coins_admin(user_id: int, amount: int, reason: str = "Выдача
 
 
 async def grant_coins(user_id: int, base_amount: int, reason: str = "Награда за заезд") -> int:
-    """Начисляет монеты игроку."""
+    """
+    Начисляет монеты игроку с соблюдением дневных лимитов (COINS_SOFT_CAP=180, COINS_HARD_CAP=250).
+    Предотвращает любые скриптовые накрутки и дюпы.
+    Возвращает фактически начисленное количество монет.
+    """
     if base_amount <= 0:
         return 0
-    await add_coins(user_id, base_amount, reason=reason)
-    return base_amount
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    async with _connect() as db:
+        cur = await db.execute("SELECT coins_today, coins_date FROM players WHERE user_id = ?", (user_id,))
+        row = await cur.fetchone()
+        if not row:
+            return 0
+        earned, date = row
+        earned = earned or 0
+        if date != today:
+            earned = 0
+
+        if earned < COINS_SOFT_CAP:
+            amount = min(base_amount, COINS_SOFT_CAP - earned) + max(
+                0, int((base_amount - (COINS_SOFT_CAP - earned)) * 0.5)
+            )
+        elif earned < COINS_HARD_CAP:
+            left = (COINS_HARD_CAP - earned) / max(1, (COINS_HARD_CAP - COINS_SOFT_CAP))
+            amount = max(1, int(base_amount * left * random.uniform(0.3, 0.6)))
+        else:
+            amount = 1 if random.random() < 0.20 else 0
+
+        amount = max(0, amount)
+        await db.execute(
+            "UPDATE players SET coins = coins + ?, money = money + ?, coins_today = ?, coins_date = ? WHERE user_id = ?",
+            (amount, amount, earned + amount, today, user_id),
+        )
+        await db.commit()
+    if amount > 0:
+        await log_coin_tx(user_id, amount, reason)
+    return amount
 
 
 

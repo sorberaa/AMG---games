@@ -6,11 +6,14 @@ import db
 import data
 from data import CAR_CATALOG, STREET_OPPONENTS, fmt
 from engine import calc_rewards, calc_stats, car_upgrades, simulate_race
-from kb import back_kb, pvp_bet_kb, pvp_challenge_kb, pvp_list_kb, race_menu_kb, race_result_kb, street_opponents_kb
+from kb import (
+    back_kb, pvp_bet_kb, pvp_challenge_kb, pvp_list_kb,
+    race_menu_kb, race_result_kb, solo_race_kb, solo_race_result_kb, street_opponents_kb
+)
 from utils import award_achievements, safe_edit, send_menu
 
 router = Router(name="race")
-MAX_BET = 1_000_000
+MAX_BET = 100
 
 
 async def team_only_redirect(event, is_callback: bool = False):
@@ -52,41 +55,45 @@ async def race_menu_text(uid: int) -> str:
 
 @router.message(Command("race"))
 async def cmd_race(message: Message):
-    if message.chat.type == "private":
-        return await team_only_redirect(message, is_callback=False)
     await send_menu(message, message.from_user.id, await race_menu_text(message.from_user.id), race_menu_kb())
 
 
 @router.callback_query(F.data == "race")
 async def cb_race(cb: CallbackQuery):
     await cb.answer()
-    if cb.message.chat.type == "private":
-        return await team_only_redirect(cb, is_callback=True)
     await safe_edit(cb, await race_menu_text(cb.from_user.id), race_menu_kb())
 
 
-@router.callback_query(F.data == "race_street")
-async def cb_street(cb: CallbackQuery):
-    await cb.answer()
-    if cb.message.chat.type == "private":
-        return await team_only_redirect(cb, is_callback=True)
-    uid = cb.from_user.id
+async def solo_race_view(uid: int):
+    energy = await db.regen_energy(uid)
     p = await db.get_player(uid)
-    defeated = p.get("defeated_opponents", 0)
     pc = await db.get_selected_car(uid)
-    my = calc_stats(CAR_CATALOG[pc["car_key"]], car_upgrades(pc))["rating"] if pc else 0
-    lines = []
-    for i, o in enumerate(STREET_OPPONENTS):
-        r = calc_stats(CAR_CATALOG[o["car_key"]], o["upgrades"])["rating"]
-        status = "✅" if i < defeated else ("⚔️" if i == defeated else "🔒")
-        lines.append(f"{status} {o['name']}: рейтинг {r}")
-    await safe_edit(cb, f"🏎 <b>Уличные гонки (Лестница боссов)</b>\n\nТвой рейтинг: <b>{my}</b>\n\n" + "\n".join(lines) +
-                    "\n\n<i>Побеждай по порядку! Награды в монетах зависят от крутости твоей тачки.</i>", street_opponents_kb(defeated))
+    if not pc:
+        return "⚠️ <b>Сначала выбери машину в гараже (/garage)!</b>", back_kb("garage:0")
+    car = CAR_CATALOG[pc["car_key"]]
+    rating = calc_stats(car, car_upgrades(pc))["rating"]
+    wait = await db.minutes_to_next_energy(uid)
+    regen = f"\n⏳ +1 ⚡ через {wait} мин" if wait else ""
+    gif_tag = f"<a href='{data.AMG_GIFS['race']}'>&#8205;</a>"
+    text = (
+        f"{gif_tag}🏎 <b>ОДИНОЧНЫЙ ЗАЕЗД MERCEDES-AMG</b> 🎁\n\n"
+        f"🚗 Твой болид: {car['emoji']} <b>{car['name']}</b> (Рейтинг: <b>{rating}</b>)\n"
+        f"⚡ Энергия: <b>{energy}/{p['max_energy']}</b>{regen}\n\n"
+        "Быстрый одиночный спринт против городского гонщика на улицах города!\n"
+        "• ⚡ Расход: <b>1 энергия</b>\n"
+        "• 🎁 Награды за победу: <b>4–6 🪙 монет</b>, <b>+50 XP</b>\n"
+        "• 🎁 <b>Случайный подарок:</b> шанс выиграть бонусные монеты или восстановление энергии!\n\n"
+        "<i>🔥 Главные командные соревнования, битва за кубки и дуэли со ставками — в командных чатах (/tournament, /duel, /boss)!</i>"
+    )
+    return text, solo_race_kb()
 
 
-@router.callback_query(F.data.startswith("race_street_locked:"))
-async def cb_street_locked(cb: CallbackQuery):
-    await cb.answer("🔒 Сначала одолей предыдущего соперника!", show_alert=True)
+@router.callback_query(F.data == "race_solo")
+@router.callback_query(F.data == "race_street")
+async def cb_solo_race(cb: CallbackQuery):
+    await cb.answer()
+    text, kb = await solo_race_view(cb.from_user.id)
+    await safe_edit(cb, text, kb)
 
 
 async def apply_result(uid: int, car_id: int, won: bool, race_type: str, mult: float = 1.0, car_rating: int = 150) -> str:
@@ -96,10 +103,11 @@ async def apply_result(uid: int, car_id: int, won: bool, race_type: str, mult: f
     await db.increment(uid, races_total=1, wins=int(won), losses=int(not won), reputation=r["rep"],
                        pvp_wins=int(won and race_type == "pvp"))
     coins = r.get("coins", 0)
+    earned = 0
     if coins:
-        await db.add_coins(uid, coins, reason=f"Гонка ({race_type})")
+        earned = await db.grant_coins(uid, coins, reason=f"Гонка ({race_type})")
     lvl, up = await db.add_xp(uid, r["xp"])
-    parts = [f"🪙 +{coins} монет", f"📈 +{r['xp']} XP"]
+    parts = [f"🪙 +{earned} монет", f"📈 +{r['xp']} XP"]
     if r["rep"]:
         parts.append(f"⭐ +{r['rep']}")
     text = " · ".join(parts)
@@ -108,23 +116,10 @@ async def apply_result(uid: int, car_id: int, won: bool, race_type: str, mult: f
     return text
 
 
+@router.callback_query(F.data == "race_solo_start")
 @router.callback_query(F.data.startswith("race_street:"))
-async def cb_street_race(cb: CallbackQuery):
-    if cb.message.chat.type == "private":
-        await cb.answer()
-        return await team_only_redirect(cb, is_callback=True)
+async def cb_solo_race_start(cb: CallbackQuery):
     uid = cb.from_user.id
-    opp_idx = int(cb.data.split(":")[1])
-    try:
-        opp = STREET_OPPONENTS[opp_idx]
-    except (ValueError, IndexError):
-        return await cb.answer("Соперник не найден", show_alert=True)
-
-    p = await db.get_player(uid)
-    defeated = p.get("defeated_opponents", 0)
-    if opp_idx > defeated:
-        return await cb.answer("🔒 Сначала победи предыдущего соперника!", show_alert=True)
-
     pc = await db.get_selected_car(uid)
     if not pc:
         return await cb.answer("Сначала выбери машину в гараже!", show_alert=True)
@@ -133,19 +128,22 @@ async def cb_street_race(cb: CallbackQuery):
         return await cb.answer(f"⚡ Нет энергии! Следующая через {wait} мин.\nМожно восполнить в магазине монет 🪙",
                                show_alert=True)
     await cb.answer("🏁 Погнали!")
+    p = await db.get_player(uid)
     my_car = CAR_CATALOG[pc["car_key"]]
-    opp_car = CAR_CATALOG[opp["car_key"]]
     me = cb.from_user.first_name or "Ты"
 
-    # Иммунитет от аварии для самых слабых машин в каждом тире
+    # Подбираем сбалансированного соперника из списка
+    opp = random.choice(STREET_OPPONENTS)
+    opp_car = CAR_CATALOG[opp["car_key"]]
+
     my_immune = data.is_weakest_in_tier(pc["car_key"])
     opp_immune = data.is_weakest_in_tier(opp["car_key"])
-
     p_ins = bool(p.get("has_insurance"))
     from utils import is_salt_boosted
     my_spd_mult = 1.25 if is_salt_boosted(p) else 1.0
     my_stats = calc_stats(my_car, car_upgrades(pc), speed_mult=my_spd_mult)
     my_color = pc.get("color")
+
     res = simulate_race(
         my_stats, calc_stats(opp_car, opp["upgrades"]), me, opp["name"],
         p1_insured=p_ins, p1_immune=my_immune, p2_immune=opp_immune,
@@ -155,17 +153,23 @@ async def cb_street_race(cb: CallbackQuery):
         await db.update_player(uid, has_insurance=0)
     won = res["winner"] == 1
 
-    # Если победил соперника — навсегда открываем следующего по лестнице
-    if won:
-        new_defeated = max(defeated, opp_idx + 1)
-        if new_defeated > defeated:
-            await db.update_player(uid, defeated_opponents=new_defeated)
-
     rewards = await apply_result(uid, pc["id"], won, "street", opp["bonus_mult"], car_rating=my_stats["rating"])
-    extra = {"ghost_slayer"} if won and opp["difficulty"] == "extreme" else set()
-    ach = await award_achievements(uid, extra)
 
-    # Живая динамичная трансляция этапов гонки
+    # Подарок за заезд (небольшой приятный сюрприз)
+    gift_note = ""
+    if won:
+        gift_roll = random.random()
+        if gift_roll < 0.20:
+            extra_c = random.randint(3, 5)
+            granted_extra = await db.grant_coins(uid, extra_c, reason="Подарочный бонус за заезд")
+            if granted_extra > 0:
+                gift_note = f"\n🎁 <b>ПОДАРОК ЗА ЗАЕЗД:</b> +{granted_extra} бонусных монет 🪙!"
+        elif gift_roll < 0.30:
+            await db.increment(uid, energy=1)
+            gift_note = "\n🎁 <b>ПОДАРОК ЗА ЗАЕЗД:</b> ⚡ Восстановлена +1 энергия!"
+
+    ach = await award_achievements(uid)
+
     import asyncio
     c1 = res.get("color1", "🏎")
     c2 = res.get("color2", "🏎")
@@ -179,11 +183,11 @@ async def cb_street_race(cb: CallbackQuery):
                 f"{step}"
             )
             await safe_edit(cb, stage_view)
-            await asyncio.sleep(1.2)
+            await asyncio.sleep(1.0)
 
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>" if won and not res.get("crashed") else (f"<a href='{data.AMG_GIFS['crash']}'>&#8205;</a>" if res.get("crashed") else "")
     winner_name = f"{c1} <b>{me}</b>" if won else f"{c2} <b>{opp['name']}</b>"
-    result = (f"🏆 ПОБЕДИТЕЛЬ: {winner_name} {res['margin']}" if won else f"💀 ПОБЕДИТЕЛЬ: {winner_name} {res['margin']}\n<i>Прокачай тачку в тюнинге и отомсти!</i>")
+    result = (f"🏆 ПОБЕДИТЕЛЬ: {winner_name} {res['margin']}" if won else f"💀 ПОБЕДИТЕЛЬ: {winner_name} {res['margin']}\n<i>Прокачай тачку в тюнинге и попробуй ещё раз!</i>")
 
     final_text = (
         f"{gif_tag}🏁 <b>ФИНИШНАЯ ЧЕРТА!</b>\n\n"
@@ -194,9 +198,9 @@ async def cb_street_race(cb: CallbackQuery):
         f"{res['narrative']}\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"{result}\n\n"
-        f"{rewards}{ach}"
+        f"{rewards}{gift_note}{ach}"
     )
-    await safe_edit(cb, final_text, race_result_kb(opp_idx))
+    await safe_edit(cb, final_text, solo_race_result_kb())
 
 
 
@@ -222,14 +226,17 @@ async def create_challenge(message: Message, user, bet: int, bet_type: str = "co
 
     if bet < 0:
         return "Ставка не может быть отрицательной!"
-    if bet and not await db.spend_coins(uid, bet, reason="Ставка на PvP дуэль"):
-        return f"Недостаточно монет 🪙 для ставки! У тебя: {fmt(p['coins'])} монет."
+    if bet > MAX_BET:
+        return f"Максимальная ставка: {MAX_BET} 🪙 монет!"
 
     pc = await db.get_selected_car(uid)
     if not pc:
         return "Сначала выбери машину в гараже!"
     if await db.count_user_pending(uid) >= 3:
         return "У тебя уже 3 открытых вызова. Дождись соперников или отмени."
+
+    if bet and not await db.spend_coins(uid, bet, reason="Ставка на PvP дуэль"):
+        return f"Недостаточно монет 🪙 для ставки! У тебя: {fmt(p['coins'])} монет."
 
     race_id = await db.create_race(uid, pc["id"], bet, message.chat.id)
     async with db._connect() as _db:
@@ -257,6 +264,8 @@ async def cb_pvp_bet(cb: CallbackQuery):
         bet = int(cb.data.split(":")[1])
     except ValueError:
         return await cb.answer()
+    if bet > MAX_BET:
+        bet = MAX_BET
     err = await create_challenge(cb.message, cb.from_user, bet, bet_type="coins")
     if err:
         return await cb.answer(err, show_alert=True)
@@ -274,6 +283,8 @@ async def cmd_duel(message: Message, command: CommandObject):
             bet = int("".join(c for c in command.args if c.isdigit()))
         except ValueError:
             return await message.answer("Формат: <code>/duel 50</code> (ставка в монетах)")
+    if bet > MAX_BET:
+        return await message.answer(f"❌ Максимальная ставка в дуэли: <b>{MAX_BET} 🪙 монет</b>!")
     err = await create_challenge(message, message.from_user, bet, bet_type="coins")
     if err:
         await message.answer(f"❌ {err}")

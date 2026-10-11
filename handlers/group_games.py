@@ -1,5 +1,5 @@
-"""Командные активности в группах: Рейд на босса AMG и заезды."""
 import random
+import time
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
@@ -11,6 +11,34 @@ from engine import calc_stats, car_upgrades
 from kb import boss_kb
 
 router = Router(name="group_games")
+
+BOSS_COOLDOWN = 30 * 60        # 30 минут
+QUIZ_COOLDOWN = 3 * 3600       # 3 часа строго
+AIRDROP_COOLDOWN = 30 * 60     # 30 минут
+CHASE_COOLDOWN = 25 * 60       # 25 минут
+TOURNAMENT_COOLDOWN = 15 * 60  # 15 минут
+ROYALE_COOLDOWN = 20 * 60      # 20 минут
+DRAG_COOLDOWN = 10 * 60        # 10 минут
+
+
+async def check_chat_cooldown(chat_id: int, game_key: str, cooldown_sec: int) -> tuple[bool, str]:
+    """Проверяет кулдаун события в чате. Возвращает (активен_ли_кулдаун, строка_остатка_времени)."""
+    now = time.time()
+    last_ts = await db.get_cooldown(f"{game_key}:{chat_id}")
+    if now - last_ts < cooldown_sec:
+        rem = int(cooldown_sec - (now - last_ts))
+        rem_h = rem // 3600
+        rem_m = (rem % 3600) // 60
+        rem_s = rem % 60
+        if rem_h > 0:
+            time_str = f"{rem_h} ч. {rem_m} мин."
+        elif rem_m > 0:
+            time_str = f"{rem_m} мин."
+        else:
+            time_str = f"{rem_s} сек."
+        return True, time_str
+    return False, ""
+
 
 BOSS_NAMES = [
     ("Шеф полиции на броне-Гелике", "g63", 3000),
@@ -28,6 +56,13 @@ async def cmd_boss(message: Message):
     chat_id = message.chat.id
     boss = await db.get_active_boss(chat_id)
     if not boss:
+        on_cd, rem_t = await check_chat_cooldown(chat_id, "boss", BOSS_COOLDOWN)
+        if on_cd:
+            return await message.answer(
+                f"⏳ <b>Рейдовый босс в этом чате уже был повержен!</b>\n\n"
+                f"Следующий босс появится через: <b>{rem_t}</b>.\n"
+                f"<i>Пока ждёшь, устрой дуэль (/duel) или собери турнир (/tournament)!</i>"
+            )
         boss_data = random.choice(data.BOSS_ROSTER)
         boss = await db.create_boss(chat_id, boss_data["name"], boss_data["car_key"], boss_data["hp"])
         car = CAR_CATALOG[boss_data["car_key"]]
@@ -130,11 +165,12 @@ async def execute_boss_strike(cb: CallbackQuery, is_nitro: bool = False):
                 coins = 6
                 xp = 150
 
-            await db.add_coins_admin(target_uid, coins, reason=f"Победа над боссом {boss['boss_name']}")
+            await db.grant_coins(target_uid, coins, reason=f"Победа над боссом {boss['boss_name']}")
             await db.add_xp(target_uid, xp)
 
         gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
         await db.delete_boss(chat_id)
+        await db.set_cooldown(f"boss:{chat_id}", time.time())
         await cb.message.answer(
             f"{gif_tag}🏆 <b>БОСС «{boss['boss_name']}» ПОЛНОСТЬЮ УНИЧТОЖЕН!</b>\n\n"
             f"🎉 Чат одержал сокрушительную победу! Все участники битвы получили щедрые награды (монеты 🪙 и опыт XP).\n\n"
@@ -212,6 +248,10 @@ TOURNAMENTS: dict = {}  # chat_id -> {status, participants: [user_id], names: {u
 
 
 async def start_tournament_recruitment(chat_id: int, organizer_name: str, send_fn):
+    on_cd, rem_t = await check_chat_cooldown(chat_id, "tournament", TOURNAMENT_COOLDOWN)
+    if on_cd:
+        return await send_fn(f"⏳ <b>Гран-при чата уже проводился недавно!</b>\n\nСледующий заезд будет доступен через: <b>{rem_t}</b>.")
+
     if chat_id in TOURNAMENTS and TOURNAMENTS[chat_id]["status"] == "recruiting":
         return await send_fn("⚠️ Регистрация на Гран-при чата уже открыта! Жми кнопку ниже.")
 
@@ -416,21 +456,21 @@ async def cb_tourn_start(cb: CallbackQuery):
         m = medals[i] if i < 3 else f"{i + 1}."
         col = participant_colors.get(uid, "🏎")
         if i == 0:
-            await db.add_coins_admin(uid, 20, reason="1 место в Гран-при чата")
+            c_g = await db.grant_coins(uid, 20, reason="1 место в Гран-при чата")
             await db.add_xp(uid, 350)
-            reward_txt = " (+20 🪙, +350 XP)"
+            reward_txt = f" (+{c_g} 🪙, +350 XP)"
         elif i == 1:
-            await db.add_coins_admin(uid, 12, reason="2 место в Гран-при чата")
+            c_g = await db.grant_coins(uid, 12, reason="2 место в Гран-при чата")
             await db.add_xp(uid, 200)
-            reward_txt = " (+12 🪙, +200 XP)"
+            reward_txt = f" (+{c_g} 🪙, +200 XP)"
         elif i == 2:
-            await db.add_coins_admin(uid, 7, reason="3 место в Гран-при чата")
+            c_g = await db.grant_coins(uid, 7, reason="3 место в Гран-при чата")
             await db.add_xp(uid, 100)
-            reward_txt = " (+7 🪙, +100 XP)"
+            reward_txt = f" (+{c_g} 🪙, +100 XP)"
         else:
-            await db.add_coins_admin(uid, 3, reason="Участие в Гран-при")
+            c_g = await db.grant_coins(uid, 3, reason="Участие в Гран-при")
             await db.add_xp(uid, 40)
-            reward_txt = " (+3 🪙, +40 XP)"
+            reward_txt = f" (+{c_g} 🪙, +40 XP)"
 
         res_lines.append(f"{m} {col} <b>{name}</b> ({car_name}){reward_txt}")
 
@@ -448,6 +488,7 @@ async def cb_tourn_start(cb: CallbackQuery):
     except Exception:
         pass
     TOURNAMENTS.pop(chat_id, None)
+    await db.set_cooldown(f"tournament:{chat_id}", time.time())
 
 
 # ── Кооперативная игра: Погоня от полиции (/chase) ───────────
@@ -463,6 +504,13 @@ async def cmd_chase(message: Message):
     chat_id = message.chat.id
     if chat_id in CHASES:
         return await message.answer("⚠️ Погоня уже идёт! Жмите кнопки действий.")
+
+    on_cd, rem_t = await check_chat_cooldown(chat_id, "chase", CHASE_COOLDOWN)
+    if on_cd:
+        return await message.answer(
+            f"⏳ <b>Банда уже уходила от погони недавно!</b>\n\n"
+            f"Полиция патрулирует улицы. Следующая вылазка через: <b>{rem_t}</b>."
+        )
 
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton as Btn
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -523,14 +571,15 @@ async def cb_chase_act(cb: CallbackQuery):
         gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
         crew_count = len(ch["crew"])
         for u in ch["crew"]:
-            await db.add_coins_admin(u, 12, reason="Успешный уход от погони")
+            await db.grant_coins(u, 12, reason="Успешный уход от погони")
             await db.add_xp(u, 150)
         await cb.message.edit_text(
             f"{gif_tag}🏆 <b>БАНДА УШЛА В ОТРЫВ!</b>\n\n"
             f"Полиция потеряла след в ночном городе! Все участники ({crew_count} чел.) "
-            "получили по <b>+12 🪙 монет</b> и <b>+150 XP</b>!"
+            "получили награды (монеты 🪙 и опыт XP)!"
         )
         CHASES.pop(chat_id, None)
+        await db.set_cooldown(f"chase:{chat_id}", time.time())
     elif ch["heat"] >= 100:
         # Провал
         gif_tag = f"<a href='{data.AMG_GIFS['crash']}'>&#8205;</a>"
@@ -539,6 +588,7 @@ async def cb_chase_act(cb: CallbackQuery):
             "Полицейские выставили шипы и окружили колонну. Придется залечь на дно!"
         )
         CHASES.pop(chat_id, None)
+        await db.set_cooldown(f"chase:{chat_id}", time.time())
     else:
         from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton as Btn
         kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -622,6 +672,15 @@ async def cmd_quiz(message: Message):
         return await message.answer("❓ Викторина доступна только в группах! Добавь бота в чат и пиши /quiz")
 
     chat_id = message.chat.id
+    on_cd, rem_t = await check_chat_cooldown(chat_id, "quiz", QUIZ_COOLDOWN)
+    if on_cd:
+        return await message.answer(
+            f"⏳ <b>АВТО-ВИКТОРИНА AMG НЕДОСТУПНА!</b>\n\n"
+            f"Викторина проводится строго <b>раз в 3 часа</b>.\n"
+            f"Следующая викторина в этом чате будет доступна через: <b>{rem_t}</b>.\n\n"
+            f"<i>Пока ждёшь, устрой дуэль (/duel), собери Гран-при (/tournament) или проверь одиночный заезд (/race)!</i>"
+        )
+
     q_data = random.choice(QUIZ_QUESTIONS)
     # Перемешиваем варианты
     opts_with_idx = list(enumerate(q_data["opts"]))
@@ -637,8 +696,10 @@ async def cmd_quiz(message: Message):
     ACTIVE_QUIZZES[chat_id] = {
         "correct": correct_new_idx,
         "q": q_data,
-        "active": True
+        "active": True,
+        "attempts": set(),
     }
+    await db.set_cooldown(f"quiz:{chat_id}", time.time())
 
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton as Btn
     rows = []
@@ -648,7 +709,8 @@ async def cmd_quiz(message: Message):
     await message.answer(
         "🧠 <b>АВТО-ВИКТОРИНА AMG ДЛЯ ЧАТА!</b>\n\n"
         f"<b>Вопрос:</b>\n{q_data['q']}\n\n"
-        "<i>Кто первым нажмет правильный ответ — забирает +25 🪙 монет и +150 XP!</i>",
+        "<i>Кто первым нажмет правильный ответ — забирает +20 🪙 монет и +150 XP!</i>\n"
+        "⚠️ <i>У каждого участника ровно одна попытка ответа.</i>",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows)
     )
 
@@ -658,15 +720,19 @@ async def cb_quiz_answer(cb: CallbackQuery):
     chat_id = cb.message.chat.id
     qz = ACTIVE_QUIZZES.get(chat_id)
     if not qz or not qz.get("active"):
-        return await cb.answer("Эта викторина уже завершена! Запустите новую через /quiz", show_alert=True)
+        return await cb.answer("Эта викторина уже завершена! Следующая через 3 часа.", show_alert=True)
+
+    uid = cb.from_user.id
+    if uid in qz.get("attempts", set()):
+        return await cb.answer("❌ Ты уже дал свой ответ! Один вопрос — одна попытка.", show_alert=True)
+    qz.setdefault("attempts", set()).add(uid)
 
     ans_idx = int(cb.data.split(":")[1])
-    uid = cb.from_user.id
     uname = cb.from_user.first_name
 
     if ans_idx == qz["correct"]:
         qz["active"] = False
-        await db.add_coins_admin(uid, 25, reason="Победа в чат-викторине")
+        earned = await db.grant_coins(uid, 20, reason="Победа в чат-викторине")
         await db.add_xp(uid, 150)
         await cb.answer("🎉 ПРАВИЛЬНО! Ты выиграл!", show_alert=True)
         fact_text = qz["q"]["fact"]
@@ -674,12 +740,12 @@ async def cb_quiz_answer(cb: CallbackQuery):
             f"🏆 <b>ПОБЕДИТЕЛЬ ВИКТОРИНЫ: {uname}!</b>\n\n"
             f"✅ <b>Верный ответ:</b> {qz['q']['opts'][qz['q']['correct']]}\n\n"
             f"💡 <i>{fact_text}</i>\n\n"
-            f"💰 Награда <b>+25 🪙 монет</b> и <b>+150 XP</b> начислена {uname}!\n"
-            "Запустить ещё: <code>/quiz</code>"
+            f"💰 Награда <b>+{earned} 🪙 монет</b> и <b>+150 XP</b> начислена {uname}!\n\n"
+            "⏳ <i>Следующая авто-викторина будет доступна через <b>3 часа</b>.</i>"
         )
         ACTIVE_QUIZZES.pop(chat_id, None)
     else:
-        await cb.answer("❌ Неверно! Попробуй другой вариант или дай шанс другим!", show_alert=True)
+        await cb.answer("❌ Неверно! Твоя попытка исчерпана.", show_alert=True)
 
 
 # ── 2. Аирдроп контейнера с лутом (/airdrop, /drop) ──────────
@@ -695,6 +761,13 @@ async def cmd_airdrop(message: Message):
     chat_id = message.chat.id
     if chat_id in AIRDROPS and AIRDROPS[chat_id]["status"] == "waiting":
         return await message.answer("⚠️ В чате уже сброшен контейнер! Жмите кнопку ниже, чтобы взломать.")
+
+    on_cd, rem_t = await check_chat_cooldown(chat_id, "airdrop", AIRDROP_COOLDOWN)
+    if on_cd:
+        return await message.answer(
+            f"⏳ <b>Контейнер с лутом уже сбрасывался недавно!</b>\n\n"
+            f"Следующий аирдроп будет доступен через: <b>{rem_t}</b>."
+        )
 
     AIRDROPS[chat_id] = {
         "participants": set(),
@@ -784,9 +857,9 @@ async def cb_drop_open(cb: CallbackQuery):
         else:
             coins, xp = 3, 80
 
-        await db.add_coins_admin(uid, coins, reason="Аирдроп контейнера в чате")
+        c_g = await db.grant_coins(uid, coins, reason="Аирдроп контейнера в чате")
         await db.add_xp(uid, xp)
-        res_lines.append(f"{m} <b>{name}</b> — <b>+{coins} 🪙</b>, +{xp} XP")
+        res_lines.append(f"{m} <b>{name}</b> — <b>+{c_g} 🪙</b>, +{xp} XP")
 
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
     await cb.message.edit_text(
@@ -796,6 +869,7 @@ async def cb_drop_open(cb: CallbackQuery):
         "\n\n<i>Запустить новый дроп: /airdrop</i>"
     )
     AIRDROPS.pop(chat_id, None)
+    await db.set_cooldown(f"airdrop:{chat_id}", time.time())
 
 
 # ── 3. Королевская битва на выбывание (/royale) ──────────────
@@ -820,6 +894,13 @@ async def cmd_royale(message: Message):
     chat_id = message.chat.id
     if chat_id in ROYALES and ROYALES[chat_id]["status"] == "recruiting":
         return await message.answer("⚠️ Битва на выбывание уже собирается! Жмите кнопку ниже.")
+
+    on_cd, rem_t = await check_chat_cooldown(chat_id, "royale", ROYALE_COOLDOWN)
+    if on_cd:
+        return await message.answer(
+            f"⏳ <b>Королевская битва уже проходила недавно!</b>\n\n"
+            f"Следующая битва на выбывание будет доступна через: <b>{rem_t}</b>."
+        )
 
     ROYALES[chat_id] = {
         "participants": [],
@@ -921,7 +1002,7 @@ async def cb_royale_start(cb: CallbackQuery):
     winner_car = CAR_CATALOG[ry["cars"][winner_id]["car_key"]]["name"]
 
     # Награда победителю
-    await db.add_coins_admin(winner_id, 25, reason="1 место в Royal Выбывании")
+    earned = await db.grant_coins(winner_id, 25, reason="1 место в Royal Выбывании")
     await db.add_xp(winner_id, 500)
 
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
@@ -931,10 +1012,11 @@ async def cb_royale_start(cb: CallbackQuery):
         f"<b>Хроника заезда:</b>\n{log_text}\n\n"
         f"🏆 <b>ЕДИНСТВЕННЫЙ ВЫЖИВШИЙ ЧЕМПИОН:</b>\n"
         f"🥇 <b>{winner_name}</b> на <b>{winner_car}</b>!\n\n"
-        f"💰 Награда победителя: <b>+25 🪙 монет</b> и <b>+500 XP</b>!\n"
+        f"💰 Награда победителя: <b>+{earned} 🪙 монет</b> и <b>+500 XP</b>!\n"
         "Сыграть ещё: <code>/royale</code>"
     )
     ROYALES.pop(chat_id, None)
+    await db.set_cooldown(f"royale:{chat_id}", time.time())
 
 
 # ── Колесо Фортуны AMG (/wheel, /spin) ──────────────────────────
@@ -992,7 +1074,7 @@ async def cb_wheel_spin(cb: CallbackQuery):
     ptype = prize["type"]
     pval = prize["val"]
     if ptype == "coins":
-        await db.add_coins_admin(uid, pval, reason="Колесо Фортуны AMG")
+        await db.grant_coins(uid, pval, reason="Колесо Фортуны AMG")
     elif ptype == "energy":
         cur_e = p["energy"]
         max_e = p["max_energy"]
@@ -1037,6 +1119,14 @@ async def cmd_adventure(message: Message):
         )
 
     uid = message.from_user.id
+    today = db.now_str()[:10]
+    adv_count = await db.get_cooldown(f"adv_cnt:{uid}:{today}")
+    if adv_count >= 3:
+        return await message.answer(
+            "⏳ <b>ЛИМИТ ПОХОЖДЕНИЙ:</b> Ты уже совершил 3 ночных выезда сегодня!\n"
+            "Возвращайся за новыми приключениями завтра."
+        )
+
     pc = await db.get_selected_car(uid)
     if not pc:
         return await message.answer("Сначала выбери авто в /start!")
@@ -1056,7 +1146,8 @@ async def cmd_adventure(message: Message):
 
     await message.answer(
         f"{gif_tag}🌃 <b>НОЧНОЕ ПОХОЖДЕНИЕ AMG: {scenario['title'].upper()}</b>\n\n"
-        f"🚗 Твой болид: <b>{car['name']}</b>\n\n"
+        f"🚗 Твой болид: <b>{car['name']}</b>\n"
+        f"📊 Поездка: <b>{int(adv_count) + 1}/3 за сегодня</b>\n\n"
         f"📖 <i>{scenario['desc']}</i>\n\n"
         f"<b>Сделай свой выбор:</b>",
         reply_markup=adventure_choice_kb(sc_idx, scenario["choices"])
@@ -1074,6 +1165,10 @@ async def cb_adventure_choice(cb: CallbackQuery):
     pc = await db.get_selected_car(uid)
     if not pc or p["energy"] < 2:
         return await cb.answer("Недостаточно энергии (нужно 2 ⚡)!", show_alert=True)
+
+    today = db.now_str()[:10]
+    adv_count = await db.get_cooldown(f"adv_cnt:{uid}:{today}")
+    await db.set_cooldown(f"adv_cnt:{uid}:{today}", adv_count + 1)
 
     await db.use_energy(uid)
     await db.use_energy(uid)
@@ -1098,14 +1193,14 @@ async def cb_adventure_choice(cb: CallbackQuery):
     is_success = random.random() < chance
 
     if is_success:
-        await db.add_coins_admin(uid, choice["win_coins"], reason=f"Похождение: {scenario['title']}")
+        c_win = await db.grant_coins(uid, choice["win_coins"], reason=f"Похождение: {scenario['title']}")
         await db.add_xp(uid, choice["win_xp"])
         gif_tag = f"<a href='{data.AMG_GIFS['drift']}'>&#8205;</a>"
         await cb.message.edit_text(
             f"{gif_tag}✅ <b>УСПЕХ! ВЫБОР СРАБОТАЛ ИДЕАЛЬНО!</b>\n\n"
             f"<i>{choice['success_text']}</i>\n\n"
             f"🎁 <b>Твоя добыча:</b>\n"
-            f"• 🪙 +{choice['win_coins']} монет AMG\n"
+            f"• 🪙 +{c_win} монет AMG\n"
             f"• 📈 +{choice['win_xp']} XP\n\n"
             "Ночь удалась! Отправляйся в следующее похождение: <code>/adventure</code>",
             reply_markup=None
@@ -1132,6 +1227,13 @@ async def cmd_drag(message: Message):
         return await message.answer("🚦 Драг-рейсинг доступен только в группах! Добавь бота в чат и пиши /drag")
 
     chat_id = message.chat.id
+    on_cd, rem_t = await check_chat_cooldown(chat_id, "drag", DRAG_COOLDOWN)
+    if on_cd:
+        return await message.answer(
+            f"⏳ <b>Драг-рейсинг на 402м уже проводился недавно!</b>\n\n"
+            f"Следующий заезд будет доступен через: <b>{rem_t}</b>."
+        )
+
     uid = message.from_user.id
     pc = await db.get_selected_car(uid)
     if not pc:
@@ -1230,7 +1332,7 @@ async def cb_drag_launch(cb: CallbackQuery):
     loser_name = drag["opponent_name"] if uid == drag["challenger_id"] else drag["challenger_name"]
 
     # Награда
-    await db.add_coins_admin(uid, 15, reason="Победа в Драг-рейсинге 402м")
+    c_drag = await db.grant_coins(uid, 15, reason="Победа в Драг-рейсинге 402м")
     await db.add_xp(uid, 200)
 
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
@@ -1238,9 +1340,10 @@ async def cb_drag_launch(cb: CallbackQuery):
         f"{gif_tag}🏁 <b>ФИНИШ 402 МЕТРА! ПОБЕДА!</b>\n\n"
         f"🥇 <b>{winner_name}</b> показал молниеносную реакцию: <b>{reaction} сек</b>!\n"
         f"🥈 <i>{loser_name}</i> отстал на пол-корпуса.\n\n"
-        f"💰 Награда победителю: <b>+15 🪙 монет</b> и <b>+200 XP</b>!\n\n"
+        f"💰 Награда победителю: <b>+{c_drag} 🪙 монет</b> и <b>+200 XP</b>!\n\n"
         "Сыграть ещё: <code>/drag</code>"
     )
     DRAG_RACES.pop(chat_id, None)
+    await db.set_cooldown(f"drag:{chat_id}", time.time())
 
 
