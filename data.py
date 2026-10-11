@@ -189,23 +189,23 @@ CASES = {
     },
 }
 
-# AMG GIFs (проверенные прямые ссылки Giphy)
+# AMG GIFs (проверенные прямые GIF с автомобилями Mercedes-AMG)
 AMG_GIFS = {
-    "welcome": "https://media.giphy.com/media/xUOrwihVn9p8HhU3iU/giphy.gif",
-    "win": "https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif",
-    "crash": "https://media.giphy.com/media/26n6WywStCAfdHUM8/giphy.gif",
-    "boss": "https://media.giphy.com/media/l41JGlWa1xOjJSsV2/giphy.gif",
-    "chest": "https://media.giphy.com/media/26AHONQ79FdWZhAI0/giphy.gif",
-    "boss_rage": "https://media.giphy.com/media/l4pTfSeH65zpQW7yo/giphy.gif",
-    "race": "https://media.giphy.com/media/MDJ9IbxxvDUQM/giphy.gif",
-    "burnout": "https://media.giphy.com/media/3o7TKsWZBdg99GS956/giphy.gif",
-    "drift": "https://media.giphy.com/media/l0HlHJGHe3yAMhdQY/giphy.gif",
-    "garage": "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif",
-    "heist": "https://media.giphy.com/media/3ohhwkIX215Zg8k59u/giphy.gif",
-    "wheel": "https://media.giphy.com/media/26AHONQ79FdWZhAI0/giphy.gif",
-    "drag": "https://media.giphy.com/media/3o7TKUM3IgJBX2as9O/giphy.gif",
-    "police": "https://media.giphy.com/media/ryMHjDHZtfKoggE436/giphy.gif",
-    "autobahn": "https://media.giphy.com/media/d8isjk1UBP755nnld4/giphy.gif",
+    "welcome": "https://media.tenor.com/0C8klDvuopYAAAAM/mercedes-benz-mercedes.gif",
+    "win": "https://media.tenor.com/3rpwuiDLFK0AAAAM/forza-horizon-5-mercedes-amg-gt-r.gif",
+    "crash": "https://media.tenor.com/FusLX8DRHjUAAAAM/mercedes-clr-mercedes-benz-clr.gif",
+    "boss": "https://media.tenor.com/SMfTQh_L4ykAAAAM/forza-horizon4-mercedes-benz-g65amg.gif",
+    "chest": "https://media.tenor.com/V3DWk6ZLvzgAAAAM/mercedes-amg-amg.gif",
+    "boss_rage": "https://media.tenor.com/Iqr0XGqDUGcAAAAM/forza-horizon5-mercedes-benz-g60amg.gif",
+    "race": "https://media.tenor.com/dsQKgHxp1koAAAAM/forza-horizon-5-mercedes-amg-gt3.gif",
+    "burnout": "https://media.tenor.com/zK14d9A9JcgAAAAM/mercedes-c63-drifting.gif",
+    "drift": "https://media.tenor.com/cOd5d2YhhggAAAAM/opris-handsome-mercedes-drift.gif",
+    "garage": "https://media.tenor.com/iibDzEi-aREAAAAM/mercedes-amg-gt-63-cars.gif",
+    "heist": "https://media.tenor.com/bE1p6fxp93QAAAAM/cls63-cls.gif",
+    "wheel": "https://media.tenor.com/UJGeQmzsja0AAAAM/forza-horizon-5-mercedes-amg-gt-black-series.gif",
+    "drag": "https://media.tenor.com/A4a-ejXthrwAAAAM/forza-horizon-4-mercedes-amg-c-63-s-coupe.gif",
+    "police": "https://media.tenor.com/lOcnIOQKtVUAAAAM/makhachkalaracing-02reg.gif",
+    "autobahn": "https://media.tenor.com/F0XjiYxCuPAAAAAM/forza-horizon5-mercedes-amg-project-one.gif",
 }
 
 # Расширенный ростер Рейдовых Боссов чата
