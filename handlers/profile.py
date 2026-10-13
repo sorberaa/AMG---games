@@ -23,13 +23,16 @@ async def profile_text(uid: int) -> str:
     need = xp_for_level(p["level"])
     bar_len = int(p["xp"] / need * 10) if need else 0
     bar = "▰" * bar_len + "▱" * (10 - bar_len)
+    vip_badge = " · 👑 <b>VIP-Гонщик</b>" if db.is_vip(p) else ""
+    nitro_t = " · 🔥 <i>Нитро-буст</i>" if db.is_nitro_boosted(p) else ""
     ins_t = "🛡 Страховка: <b>Активна</b>" if p.get("has_insurance") else "🛡 Страховка: <i>Нет</i>"
     wrap_t = " · ✨ <i>Золотой винил</i>" if p.get("gold_wrap") else ""
     return (
-        f"👤 <b>{p['first_name']}</b>\n\n"
+        f"👤 <b>{p['first_name']}</b>{vip_badge}\n\n"
         f"📊 Уровень <b>{p['level']}</b>\n{bar} {p['xp']}/{need} XP\n\n"
         f"🪙 Баланс: <b>{fmt(p['coins'])} монет</b>\n"
-        f"{ins_t}{wrap_t}\n"
+        f"{ins_t}{wrap_t}{nitro_t}\n"
+
         f"⚡ Энергия: {p['energy']}/{p['max_energy']}\n"
         f"⭐ Репутация: {p['reputation']}\n\n"
         f"🏁 Гонок: {p['races_total']} · 🏆 {p['wins']} · 💀 {p['losses']}\n"
@@ -74,8 +77,10 @@ async def top_text(sort: str) -> str:
     lines = []
     for i, p in enumerate(players):
         pos = medals[i] if i < 3 else f"{i + 1}."
-        lines.append(f"{pos} {p['first_name']} — <b>{fmt(p[sort])}</b> {label}")
+        crown = " 👑" if db.is_vip(p) else ""
+        lines.append(f"{pos} {p['first_name']}{crown} — <b>{fmt(p[sort])}</b> {label}")
     return f"{emoji} <b>Топ гонщиков</b>\n\n" + ("\n".join(lines) or "Пока пусто")
+
 
 
 @router.message(Command("top"))

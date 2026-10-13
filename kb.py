@@ -3,7 +3,7 @@ from aiogram.types import InlineKeyboardButton as Btn, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from data import (CAR_CATALOG, CAR_CLASSES, CAR_CLASS_EMOJIS, CAR_CLASS_NAMES, CAR_COLORS, CASES, COIN_SHOP,
-                  DIFFICULTY_EMOJI, STREET_OPPONENTS, UPGRADE_DEFS, fmt, get_upgrade_cost)
+                  DIFFICULTY_EMOJI, STARS_PACKS, STREET_OPPONENTS, UPGRADE_DEFS, fmt, get_upgrade_cost)
 
 
 def back_kb(cb: str = "menu", text: str = "◀️ Назад") -> InlineKeyboardMarkup:
@@ -18,6 +18,8 @@ def main_menu_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     # Верхняя кнопка особой акции
     b.row(Btn(text="⚡ БАХНУТЬ СОЛИ (10 🪙)", callback_data="salt_boost"))
+    # Звёздный магазин Telegram Stars
+    b.row(Btn(text="⭐ ЗВЁЗДНЫЙ МАГАЗИН (STARS)", callback_data="stars_shop"))
     # Главная кнопка заездов и гонок
     b.row(Btn(text="🏁 ГОНКИ И ЗАЕЗДЫ", callback_data="race"))
     for text, cb in [
@@ -33,8 +35,9 @@ def main_menu_kb() -> InlineKeyboardMarkup:
         ("❓ Помощь", "help")
     ]:
         b.button(text=text, callback_data=cb)
-    b.adjust(1, 1, 2, 2, 2, 2, 2)
+    b.adjust(1, 1, 1, 2, 2, 2, 2, 2)
     return b.as_markup()
+
 
 
 def garage_kb(cars: list, selected_id: int, page: int = 0) -> InlineKeyboardMarkup:
@@ -312,4 +315,22 @@ def cases_kb() -> InlineKeyboardMarkup:
     b.adjust(1)
     b.row(Btn(text="🪙 Магазин монет", callback_data="cshop"), Btn(text="🏠 Главное меню", callback_data="menu"))
     return b.as_markup()
+
+
+def stars_shop_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for key, p in STARS_PACKS.items():
+        badge = f" [{p['badge']}]" if p.get("badge") else ""
+        b.button(text=f"{p['emoji']} {p['title']}{badge} — {p['stars']} ⭐️", callback_data=f"stars:view:{key}")
+    b.adjust(1)
+    b.row(Btn(text="🏠 Главное меню", callback_data="menu"))
+    return b.as_markup()
+
+
+def stars_pack_kb(pack_id: str, stars: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text=f"⭐️ Оплатить {stars} ⭐️", callback_data=f"stars:buy:{pack_id}")],
+        [Btn(text="◀️ В магазин звёзд", callback_data="stars_shop"), Btn(text="🏠 Главное меню", callback_data="menu")]
+    ])
+
 

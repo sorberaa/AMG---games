@@ -62,6 +62,9 @@ CREATE TABLE IF NOT EXISTS players (
     easy_races_date TEXT DEFAULT NULL,
     last_wheel_spin TEXT DEFAULT NULL,
     last_adventure TEXT DEFAULT NULL,
+    vip_until TEXT DEFAULT NULL,
+    nitro_boost_until TEXT DEFAULT NULL,
+    stars_spent INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -140,7 +143,16 @@ CREATE TABLE IF NOT EXISTS game_cooldowns (
     target_key TEXT PRIMARY KEY,
     last_ts REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS stars_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    pack_key TEXT NOT NULL,
+    stars_amount INTEGER NOT NULL,
+    telegram_charge_id TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
 """
+
 
 PG_SCHEMA = """
 CREATE TABLE IF NOT EXISTS players (
@@ -177,8 +189,12 @@ CREATE TABLE IF NOT EXISTS players (
     easy_races_date TEXT DEFAULT NULL,
     last_wheel_spin TEXT DEFAULT NULL,
     last_adventure TEXT DEFAULT NULL,
+    vip_until TEXT DEFAULT NULL,
+    nitro_boost_until TEXT DEFAULT NULL,
+    stars_spent INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
 
 CREATE TABLE IF NOT EXISTS player_cars (
     id SERIAL PRIMARY KEY,
@@ -262,6 +278,15 @@ CREATE TABLE IF NOT EXISTS game_cooldowns (
     target_key TEXT PRIMARY KEY,
     last_ts REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS stars_transactions (
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    pack_key TEXT NOT NULL,
+    stars_amount INTEGER NOT NULL,
+    telegram_charge_id TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 UPGRADE_COLUMNS = {
@@ -273,8 +298,9 @@ PLAYER_COLUMNS = {
     "reputation", "wins", "losses", "races_total", "pvp_wins", "daily_streak", "last_daily",
     "selected_car_id", "energy", "max_energy", "last_energy_update", "is_admin", "is_banned",
     "has_insurance", "last_coin_duel", "chat_nitro_until", "salt_boost_until", "last_salt_boost_date", "gold_wrap", "defeated_opponents",
-    "easy_races_today", "easy_races_date", "last_wheel_spin", "last_adventure"
+    "easy_races_today", "easy_races_date", "last_wheel_spin", "last_adventure", "vip_until", "nitro_boost_until", "stars_spent"
 }
+
 
 
 def now_str() -> str:
@@ -569,6 +595,15 @@ async def init_db() -> None:
 
             async with _pg_pool.acquire() as conn:
                 await conn.execute(PG_SCHEMA)
+                for col, typ in [
+                    ("vip_until", "TEXT DEFAULT NULL"),
+                    ("nitro_boost_until", "TEXT DEFAULT NULL"),
+                    ("stars_spent", "INTEGER DEFAULT 0"),
+                ]:
+                    try:
+                        await conn.execute(f"ALTER TABLE players ADD COLUMN IF NOT EXISTS {col} {typ}")
+                    except Exception:
+                        pass
                 cnt = await conn.fetchval("SELECT COUNT(*) FROM players")
                 if cnt == 0 and os.path.exists(DATABASE_PATH):
                     await migrate_sqlite_to_pg(DATABASE_PATH)
@@ -597,11 +632,15 @@ async def init_db() -> None:
             ("easy_races_date", "TEXT DEFAULT NULL"),
             ("last_wheel_spin", "TEXT DEFAULT NULL"),
             ("last_adventure", "TEXT DEFAULT NULL"),
+            ("vip_until", "TEXT DEFAULT NULL"),
+            ("nitro_boost_until", "TEXT DEFAULT NULL"),
+            ("stars_spent", "INTEGER DEFAULT 0"),
         ]:
             try:
                 await s_db.execute(f"ALTER TABLE players ADD COLUMN {col} {typ}")
             except Exception:
                 pass
+
 
         # Миграция колонок тюнинга для player_cars
         for u_col in [
@@ -1202,5 +1241,97 @@ async def update_withdrawal_status(w_id: int, status: str) -> bool:
         cur = await db.execute("UPDATE withdrawals SET status = ? WHERE id = ?", (status, w_id))
         await db.commit()
         return cur.rowcount > 0
+
+
+# ── Звёзды Telegram (Stars / XTR) ────────────────────────────
+
+def is_vip(p: dict | None) -> bool:
+    if not p or not p.get("vip_until"):
+        return False
+    try:
+        until = datetime.strptime(p["vip_until"], TS_FMT)
+        return until > datetime.utcnow()
+    except Exception:
+        return False
+
+
+def is_nitro_boosted(p: dict | None) -> bool:
+    if not p or not p.get("nitro_boost_until"):
+        return False
+    try:
+        until = datetime.strptime(p["nitro_boost_until"], TS_FMT)
+        return until > datetime.utcnow()
+    except Exception:
+        return False
+
+
+async def add_vip(user_id: int, days: int, energy_bonus: int = 3):
+    p = await get_player(user_id)
+    if not p:
+        return
+    now = datetime.utcnow()
+    current_until = None
+    if p.get("vip_until"):
+        try:
+            parsed = datetime.strptime(p["vip_until"], TS_FMT)
+            if parsed > now:
+                current_until = parsed
+        except Exception:
+            pass
+    base_time = current_until or now
+    new_until = (base_time + timedelta(days=days)).strftime(TS_FMT)
+    new_max = max(p.get("max_energy", 10), 10 + energy_bonus)
+    await update_player(user_id, vip_until=new_until, max_energy=new_max)
+
+
+async def add_nitro_boost(user_id: int, hours: int):
+    p = await get_player(user_id)
+    if not p:
+        return
+    now = datetime.utcnow()
+    current_until = None
+    if p.get("nitro_boost_until"):
+        try:
+            parsed = datetime.strptime(p["nitro_boost_until"], TS_FMT)
+            if parsed > now:
+                current_until = parsed
+        except Exception:
+            pass
+    base_time = current_until or now
+    new_until = (base_time + timedelta(hours=hours)).strftime(TS_FMT)
+    await update_player(user_id, nitro_boost_until=new_until)
+
+
+async def record_stars_payment(user_id: int, pack_key: str, stars_amount: int, charge_id: str):
+    async with _connect() as db:
+        await db.execute(
+            "INSERT INTO stars_transactions (user_id, pack_key, stars_amount, telegram_charge_id) VALUES (?, ?, ?, ?)",
+            (user_id, pack_key, stars_amount, charge_id)
+        )
+        await db.execute(
+            "UPDATE players SET stars_spent = COALESCE(stars_spent, 0) + ? WHERE user_id = ?",
+            (stars_amount, user_id)
+        )
+        await db.commit()
+
+
+async def get_stars_stats() -> dict:
+    today_start = datetime.utcnow().strftime("%Y-%m-%d 00:00:00")
+    async with _connect() as db:
+        cur = await db.execute("SELECT SUM(stars_amount), COUNT(*) FROM stars_transactions")
+        row = await cur.fetchone()
+        all_stars = int(row[0]) if row and row[0] else 0
+        all_tx = int(row[1]) if row and row[1] else 0
+
+        cur = await db.execute("SELECT SUM(stars_amount) FROM stars_transactions WHERE created_at >= ?", (today_start,))
+        row_today = await cur.fetchone()
+        today_stars = int(row_today[0]) if row_today and row_today[0] else 0
+
+        return {
+            "all_stars": all_stars,
+            "today_stars": today_stars,
+            "tx_count": all_tx,
+        }
+
 
 

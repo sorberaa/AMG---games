@@ -5,8 +5,10 @@ from handlers.menu import router as menu_router
 from handlers.profile import router as profile_router
 from handlers.race import router as race_router
 from handlers.shop import router as shop_router
+from handlers.stars import router as stars_router
 
 # admin первым — чтобы FSM-ввод админа обрабатывался раньше остальных
-all_routers = [admin_router, group_games_router, menu_router, garage_router, shop_router, race_router, profile_router]
+all_routers = [admin_router, stars_router, group_games_router, menu_router, garage_router, shop_router, race_router, profile_router]
+
 
 

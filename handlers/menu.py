@@ -12,14 +12,17 @@ router = Router(name="menu")
 
 def menu_text(p: dict) -> str:
     gif_tag = f"<a href='{data.AMG_GIFS['welcome']}'>&#8205;</a>"
+    import db
     from utils import is_salt_boosted
+    vip_indicator = " 👑" if db.is_vip(p) else ""
     salt_indicator = " · 🧂 <b>СОЛЬ (+25% 🚀)</b>" if is_salt_boosted(p) else ""
     return (
         f"{gif_tag}🏎 <b>AMG RACING</b>\n\n"
-        f"👤 {p['first_name']} · ур. <b>{p['level']}</b>\n"
+        f"👤 {p['first_name']}{vip_indicator} · ур. <b>{p['level']}</b>\n"
         f"🪙 <b>{fmt(p['coins'])} монет</b> · ⚡ {p['energy']}/{p['max_energy']}{salt_indicator}\n\n"
         "Выбери раздел:"
     )
+
 
 
 WELCOME = (

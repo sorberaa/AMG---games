@@ -79,7 +79,10 @@ CAR_CATALOG = {
     "gtr_pro": _car("Mercedes-AMG GT R PRO", "SS", "🏎", 12000, 20, 585, 318, 3.6, 95, 1500, "Трековая версия GT R."),
     "gt_bs":   _car("Mercedes-AMG GT Black Series", "SS", "🏎", 15000, 22, 730, 325, 3.2, 92, 1435, "Рекордсмен Нордшляйфе."),
     "amg_one": _car("Mercedes-AMG ONE", "SS", "👑", 30000, 25, 1063, 352, 2.9, 95, 1695, "Болид Формулы-1 с номерами."),
+    "amg_gts_star": _car("AMG GT S «Star Edition»", "S", "🌟", 6000, 1, 540, 315, 3.5, 86, 1620, "Эксклюзивная версия GT S в звёздной матовой ливрее."),
+    "gt_bs_star":   _car("AMG GT Black Series «Star Edition»", "SS", "👑", 15000, 1, 740, 328, 3.1, 94, 1420, "Королевский гиперкар Black Series в лимитированном звёздном исполнении."),
 }
+
 
 UPGRADE_DEFS = {
     "engine":       {"name": "Двигатель", "emoji": "🔧", "max_level": 5, "mult": 1.0},
@@ -179,6 +182,82 @@ COIN_SHOP = {
     "chat_nitro":    {"name": "⚡ Нитро для чата", "price": 80, "desc": "+10% скорости во всех командных гонках чата на 24ч"},
     "gold_wrap":     {"name": "✨ Золотой винил", "price": 250, "desc": "+15% к авторитету и наградам в чате"},
 }
+
+# Магазин Звёзд Telegram (Stars ⭐️ / XTR)
+STARS_PACKS = {
+    "energy_nitro": {
+        "id": "energy_nitro",
+        "title": "⚡ Полный бак + Нитро",
+        "stars": 15,
+        "emoji": "⚡",
+        "badge": "Хит продаж 🔥",
+        "short_desc": "Энергия 10/10 + Нитро на 2 часа",
+        "desc": "Мгновенное пополнение энергии до максимума + эффект «Нитро-ускоритель» (+15% к скорости) на 2 часа во всех заездах!",
+        "bonus_coins": 0,
+        "bonus_money": 5000,
+        "bonus_xp": 100,
+        "refill_energy": True,
+        "nitro_hours": 2,
+    },
+    "case_star": {
+        "id": "case_star",
+        "title": "🧰 Звёздный кейс AMG",
+        "stars": 39,
+        "emoji": "🧰",
+        "badge": "Популярный 📦",
+        "short_desc": "25 монет 🪙 + 800 XP + шанс на спорткар S-класса",
+        "desc": "Премиальный ларец: 25 монет, 800 XP, 25 000 $ на прокачку и шанс 25% выбить спорткар AMG GT S!",
+        "bonus_coins": 25,
+        "bonus_money": 25000,
+        "bonus_xp": 800,
+        "case_drop": True,
+    },
+    "vip_7": {
+        "id": "vip_7",
+        "title": "👑 VIP-Гонщик на 7 дней",
+        "stars": 79,
+        "emoji": "👑",
+        "badge": "Престиж 👑",
+        "short_desc": "Корона в нике, бак энергии 13, 40 монет 🪙",
+        "desc": "Золотой VIP-статус на 7 дней:\n• Корона 👑 возле ника в рейтингах и чатах\n• Постоянный бак 13 энергии вместо 10\n• 40 монет 🪙 и 50 000 $ на тюнинг\n• Эксклюзивная переливающаяся покраска\n• Бесплатный ежедневный спин колеса фортуны!",
+        "bonus_coins": 40,
+        "bonus_money": 50000,
+        "bonus_xp": 1500,
+        "vip_days": 7,
+        "energy_bonus": 3,
+    },
+    "car_gts_star": {
+        "id": "car_gts_star",
+        "title": "🌟 AMG GT S «Star Edition»",
+        "stars": 179,
+        "emoji": "🌟",
+        "badge": "Эксклюзив 🏎",
+        "short_desc": "Эксклюзивный спорткар S-класса + 60 монет + 3 страховки",
+        "desc": "Лимитированный спорткар Mercedes-AMG GT S «Star Edition» (540 л.с., класс S) в звёздном матовом обвесе, 60 монет 🪙, 3 страховки от аварий и 100 000 $ на тюнинг!",
+        "bonus_coins": 60,
+        "bonus_money": 100000,
+        "bonus_xp": 3000,
+        "give_car": "amg_gts_star",
+        "insurance": 3,
+    },
+    "elite_30": {
+        "id": "elite_30",
+        "title": "💎 Спонсор AMG Elite (30 дней)",
+        "stars": 349,
+        "emoji": "💎",
+        "badge": "Максимум 👑",
+        "short_desc": "VIP 30 дней + AMG GT Black Series + 100 монет",
+        "desc": "Максимальный статус спонсора на 30 дней:\n• VIP-корона 👑 и бак энергии 15 на целый месяц\n• Легендарный гиперкар Mercedes-AMG GT Black Series «Star Edition» (740 л.с., класс SS)\n• 100 монет 🪙 и 250 000 $ на тюнинг\n• Постоянная страховка от поломок на 30 дней!",
+        "bonus_coins": 100,
+        "bonus_money": 250000,
+        "bonus_xp": 6000,
+        "vip_days": 30,
+        "energy_bonus": 5,
+        "give_car": "gt_bs_star",
+        "insurance": 10,
+    },
+}
+
 
 CASES = {
     "case_basic": {

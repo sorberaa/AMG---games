@@ -18,8 +18,10 @@ _admin_cache: set = set()
 PUBLIC_CALLBACKS = (
     "race_accept:", "race_cancel:", "race_street:", "race_street",
     "tourn:", "boss:", "chase:", "drop:", "royale:", "drag:",
-    "quiz:", "adv:", "wheel:", "race_pvp", "race_coin_bet:", "race_pvp_bet:"
+    "quiz:", "adv:", "wheel:", "race_pvp", "race_coin_bet:", "race_pvp_bet:",
+    "stars:", "stars_shop"
 )
+
 
 
 def is_admin(user_id: int) -> bool:

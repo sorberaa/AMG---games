@@ -148,8 +148,13 @@ async def cb_solo_race_start(cb: CallbackQuery):
     opp_immune = data.is_weakest_in_tier(opp["car_key"])
     p_ins = bool(p.get("has_insurance"))
     from utils import is_salt_boosted
-    my_spd_mult = 1.25 if is_salt_boosted(p) else 1.0
+    my_spd_mult = 1.0
+    if is_salt_boosted(p):
+        my_spd_mult *= 1.25
+    if db.is_nitro_boosted(p):
+        my_spd_mult *= 1.15
     my_stats = calc_stats(my_car, car_upgrades(pc), speed_mult=my_spd_mult)
+
     my_color = pc.get("color")
 
     res = simulate_race(

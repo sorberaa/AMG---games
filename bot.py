@@ -89,7 +89,9 @@ async def main():
 
     await bot.set_my_commands([
         BotCommand(command="menu", description="🏠 Главное меню"),
+        BotCommand(command="stars", description="⭐ Звёздный магазин (Stars)"),
         BotCommand(command="race", description="🏁 Гонки"),
+
         BotCommand(command="duel", description="⚔️ Дуэль [ставка/монеты]"),
         BotCommand(command="boss", description="👾 Рейд на босса в чате"),
         BotCommand(command="adventure", description="🌃 Ночные похождения по автобану"),

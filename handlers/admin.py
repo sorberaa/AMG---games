@@ -245,6 +245,7 @@ async def show_db_info(cb: CallbackQuery):
 
 async def show_stats(cb: CallbackQuery):
     s = await db.server_stats()
+    stars_st = await db.get_stars_stats()
     top = await db.get_top_players("wins", 3)
     medals = ["🥇", "🥈", "🥉"]
     top_t = "\n".join(f"{medals[i]} {p['first_name']} — {p['wins']}" for i, p in enumerate(top)) or "—"
@@ -252,11 +253,14 @@ async def show_stats(cb: CallbackQuery):
         "📊 <b>Статистика сервера</b>\n\n"
         f"👥 Игроков: <b>{s['players']}</b>\n🟢 Активны сегодня: <b>{s['active_today']}</b>\n"
         f"🚫 Забанено: <b>{s['banned']}</b>\n📈 Средний уровень: <b>{s['avg_level']:.1f}</b>\n\n"
+        f"⭐️ <b>Звёзд (Stars) всего:</b> <b>{fmt(stars_st['all_stars'])} ⭐️</b>\n"
+        f"⭐️ <b>Звёзд сегодня:</b> <b>{fmt(stars_st['today_stars'])} ⭐️</b> (покупок: {stars_st['tx_count']})\n\n"
         f"🏁 Гонок всего: <b>{fmt(s['races'])}</b>\n⚔️ PvP-дуэлей: <b>{fmt(s['pvp'])}</b>\n"
         f"🚗 Машин в гаражах: <b>{fmt(s['cars'])}</b>\n\n"
         f"🪙 Монет в экономике: <b>{fmt(s['coins'])}</b>\n"
         f"🪙 Монет добыто сегодня: <b>{fmt(s['coins_today'])}</b>\n\n🏆 <b>Топ по победам:</b>\n{top_t}"
     ), back_kb())
+
 
 
 async def show_coin_flow(cb: CallbackQuery):
