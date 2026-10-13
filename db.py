@@ -768,8 +768,10 @@ async def set_cooldown(target_key: str, ts: float) -> None:
 
 async def add_coins(user_id: int, amount: int, reason: str = "Награда") -> None:
     """Единая функция начисления игровой валюты (монеты 🪙)."""
-    # Защита от аномальных сумм и дюпов: если не выдача админом, максимум 500 монет за операцию
-    if amount > 500 and "администратор" not in reason.lower() and "admin" not in reason.lower():
+    # Защита от аномальных сумм и дюпов: для обычных наград максимум 500 монет,
+    # но для официальных покупок Stars и админских операций — полное начисление без ограничений!
+    is_trusted = any(w in reason.lower() for w in ["админ", "admin", "stars", "звёзд", "звезд", "донат", "покупка"])
+    if amount > 500 and not is_trusted:
         amount = 100
 
     async with _connect() as db:
@@ -1331,7 +1333,11 @@ async def add_vip(user_id: int, days: int, energy_bonus: int = 3):
     base_time = current_until or now
     new_until = (base_time + timedelta(days=days)).strftime(TS_FMT)
     new_max = max(p.get("max_energy", 10), 10 + energy_bonus)
-    await update_player(user_id, vip_until=new_until, max_energy=new_max)
+    await update_player(user_id, vip_until=new_until, max_energy=new_max, energy=new_max)
+    try:
+        await backup_sqlite_to_json()
+    except Exception:
+        pass
 
 
 async def add_nitro_boost(user_id: int, hours: int):
@@ -1350,6 +1356,10 @@ async def add_nitro_boost(user_id: int, hours: int):
     base_time = current_until or now
     new_until = (base_time + timedelta(hours=hours)).strftime(TS_FMT)
     await update_player(user_id, nitro_boost_until=new_until)
+    try:
+        await backup_sqlite_to_json()
+    except Exception:
+        pass
 
 
 async def record_stars_payment(user_id: int, pack_key: str, stars_amount: int, charge_id: str):
@@ -1363,6 +1373,10 @@ async def record_stars_payment(user_id: int, pack_key: str, stars_amount: int, c
             (stars_amount, user_id)
         )
         await db.commit()
+    try:
+        await backup_sqlite_to_json()
+    except Exception:
+        pass
 
 
 async def get_stars_stats() -> dict:

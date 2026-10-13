@@ -58,6 +58,8 @@ def pack_details_text(pack: dict, player: dict) -> str:
         car = CAR_CATALOG.get(pack["give_car"])
         car_name = car["name"] if car else pack["give_car"]
         lines.append(f"• 🏎 <b>Эксклюзивное авто:</b> {car_name}")
+    if pack.get("gold_wrap"):
+        lines.append("• ✨ <b>Эксклюзивный золотой винил</b> на кузов")
     if pack.get("insurance"):
         lines.append(f"• 🛡 <b>{pack['insurance']} страховки AMG</b> от поломок и арестов")
     if pack.get("case_drop"):
@@ -174,9 +176,13 @@ async def successful_payment_handler(message: Message, player: dict):
 
     # 4. Игровые доллары на тюнинг
     if pack.get("bonus_money"):
-        cur_money = player.get("money", 0)
-        await db.update_player(user_id, money=cur_money + pack["bonus_money"])
+        await db.increment(user_id, money=pack["bonus_money"])
         received_lines.append(f"• 💵 Средства на тюнинг: <b>+${fmt(pack['bonus_money'])}</b>")
+
+    # 4.1 Золотой винил
+    if pack.get("gold_wrap"):
+        await db.update_player(user_id, gold_wrap=1)
+        received_lines.append("• ✨ <b>Эксклюзивный золотой винил установлен!</b> (повышает авторитет и сияние)")
 
     # 5. Опыт
     if pack.get("bonus_xp"):
@@ -200,8 +206,7 @@ async def successful_payment_handler(message: Message, player: dict):
 
     # 8. Страховка
     if pack.get("insurance"):
-        cur_ins = player.get("has_insurance", 0)
-        await db.update_player(user_id, has_insurance=cur_ins + pack["insurance"])
+        await db.increment(user_id, has_insurance=pack["insurance"])
         received_lines.append(f"• 🛡 Выдано страховок: <b>+{pack['insurance']} шт.</b>")
 
     # 9. Дроп кейса

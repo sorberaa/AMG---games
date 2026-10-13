@@ -262,6 +262,7 @@ STARS_PACKS = {
         "bonus_coins": 1200,
         "bonus_money": 150000,
         "bonus_xp": 3500,
+        "gold_wrap": True,
     },
     "car_gts_star": {
         "id": "car_gts_star",
