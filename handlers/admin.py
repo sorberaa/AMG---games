@@ -59,7 +59,7 @@ def player_kb(uid: int, p: dict) -> InlineKeyboardMarkup:
 
 # ── Вход ─────────────────────────────────────────────────────
 
-MAIN_TEXT = "🔐 <b>Админ-панель AMG Racing</b>\n\nВыбери действие:"
+MAIN_TEXT = "🔐 <b>Админ-панель AMG Racing</b>\n👑 <b>Создатель и владелец:</b> <b>A$k</b>\n\nВыбери действие:"
 
 
 @router.message(Command("myid"))

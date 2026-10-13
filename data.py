@@ -157,6 +157,8 @@ STREET_OPPONENTS = [
      "upgrades": {"engine": 3, "turbo": 3, "suspension": 3, "tires": 3, "nitro": 3, "ecu": 2}},
     {"name": "Призрак", "car_key": "amg_one", "difficulty": "extreme", "bonus_mult": 2.5,
      "upgrades": {k: 4 for k in UPGRADE_DEFS}},
+    {"name": "Легенда A$k [Создатель]", "car_key": "amg_one", "difficulty": "extreme", "bonus_mult": 3.0,
+     "upgrades": {k: 5 for k in UPGRADE_DEFS}},
 ]
 DIFFICULTY_EMOJI = {"easy": "🟢", "medium": "🟡", "hard": "🔴", "extreme": "💀"}
 
