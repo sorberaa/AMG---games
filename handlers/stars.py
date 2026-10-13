@@ -228,3 +228,4 @@ async def successful_payment_handler(message: Message, player: dict):
         "🏎 <i>Твои новые возможности уже доступны в игре. Газ в пол!</i>",
         reply_markup=back_kb("menu", "🏠 В главное меню")
     )
+
