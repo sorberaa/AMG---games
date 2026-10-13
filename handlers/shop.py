@@ -9,7 +9,7 @@ import db
 from data import (CAR_CATALOG, CAR_CLASS_EMOJIS, CAR_CLASS_NAMES, CASE_DROPS, CASES, COIN_SHOP,
                   MAX_ENERGY_CAP, fmt, get_cars_by_class)
 from engine import calc_stats
-from kb import back_kb, buy_confirm_kb, cases_kb, coin_shop_kb, shop_classes_kb, shop_list_kb
+from kb import back_kb, buy_confirm_kb, cases_kb, coin_shop_kb, not_enough_coins_kb, shop_classes_kb, shop_list_kb
 from utils import award_achievements, safe_edit
 
 router = Router(name="shop")
@@ -47,10 +47,13 @@ async def cb_shop_car(cb: CallbackQuery, player: dict):
     st = calc_stats(car, {})
     owned = await db.player_has_car_key(cb.from_user.id, key)
     problems = []
+    need_coins = False
     if player["level"] < car["level_req"]:
         problems.append(f"🔒 Нужен уровень {car['level_req']}")
     if player["coins"] < car["price"]:
-        problems.append(f"🪙 Не хватает {fmt(car['price'] - player['coins'])} монет")
+        deficit = car["price"] - player["coins"]
+        problems.append(f"🪙 Не хватает <b>{fmt(deficit)} монет</b> (пополни за ⭐️)")
+        need_coins = True
     status = "\n".join(problems) if problems else "✅ Можно купить!"
     if owned:
         status += "\n<i>У тебя уже есть такая — можно взять вторую.</i>"
@@ -59,7 +62,7 @@ async def cb_shop_car(cb: CallbackQuery, player: dict):
             f"⚡ {car['power']} л.с. · 🏁 {car['speed']} км/ч\n🚀 0-100: {car['acceleration']} с · "
             f"🎯 {car['handling']} · ⚖️ {car['weight']} кг\n📊 Рейтинг: <b>{st['rating']}</b>\n\n"
             f"🪙 Цена: <b>{fmt(car['price'])} монет</b> · Ур. {car['level_req']}+\n\n{status}")
-    await safe_edit(cb, text, buy_confirm_kb(key, car["cls"], not problems))
+    await safe_edit(cb, text, buy_confirm_kb(key, car["cls"], not problems, need_coins=need_coins))
 
 
 @router.callback_query(F.data.startswith("buy_yes:"))
@@ -74,7 +77,17 @@ async def cb_buy(cb: CallbackQuery):
     if await db.count_cars(cb.from_user.id) >= 30:
         return await cb.answer("Гараж переполнен (макс. 30)! Продай что-нибудь.", show_alert=True)
     if car["price"] > 0 and not await db.spend_coins(cb.from_user.id, car["price"], reason=f"Покупка авто {car['name']}"):
-        return await cb.answer("Недостаточно монет! 🪙", show_alert=True)
+        deficit = car["price"] - p["coins"]
+        await cb.answer()
+        return await safe_edit(
+            cb,
+            f"🪙 <b>НЕ ХВАТАЕТ МОНЕТ ДЛЯ ПОКУПКИ!</b>\n\n"
+            f"Автомобиль: {car['emoji']} <b>{car['name']}</b>\n"
+            f"Стоимость: <b>{fmt(car['price'])} 🪙</b>\n"
+            f"Твой баланс: <b>{fmt(p['coins'])} 🪙</b> (не хватает <b>{fmt(deficit)} 🪙</b>)\n\n"
+            "Пополни баланс монет за Telegram Stars ⭐️ без ограничений по суточным лимитам!",
+            not_enough_coins_kb(f"shop_car:{key}")
+        )
     car_id = await db.add_car(cb.from_user.id, key)
     await db.select_car(cb.from_user.id, car_id)
     await cb.answer()
@@ -154,12 +167,32 @@ async def cb_case_open(cb: CallbackQuery):
     uid = cb.from_user.id
     p = await db.get_player(uid)
     if p["coins"] < c_info["price"]:
-        return await cb.answer(f"Не хватает монет! Нужно {c_info['price']} 🪙 (у тебя {p['coins']} 🪙)", show_alert=True)
+        deficit = c_info["price"] - p["coins"]
+        await cb.answer()
+        return await safe_edit(
+            cb,
+            f"🧰 <b>НЕ ХВАТАЕТ МОНЕТ ДЛЯ ОТКРЫТИЯ КЕЙСА!</b>\n\n"
+            f"Сундук: {c_info['emoji']} <b>{c_info['name']}</b>\n"
+            f"Стоимость: <b>{c_info['price']} 🪙</b>\n"
+            f"Твой баланс: <b>{p['coins']} 🪙</b> (не хватает <b>{deficit} 🪙</b>)\n\n"
+            "Пополни баланс монет за Telegram Stars ⭐️ и сорви суперкар прямо сейчас!",
+            not_enough_coins_kb("cases")
+        )
     if await db.count_cars(uid) >= 30:
         return await cb.answer("Гараж переполнен! Продай машину перед открытием.", show_alert=True)
 
     if not await db.spend_coins(uid, c_info["price"], reason=f"Открытие: {c_info['name']}"):
-        return await cb.answer("Недостаточно монет 🪙", show_alert=True)
+        deficit = c_info["price"] - p["coins"]
+        await cb.answer()
+        return await safe_edit(
+            cb,
+            f"🧰 <b>НЕ ХВАТАЕТ МОНЕТ ДЛЯ ОТКРЫТИЯ КЕЙСА!</b>\n\n"
+            f"Сундук: {c_info['emoji']} <b>{c_info['name']}</b>\n"
+            f"Стоимость: <b>{c_info['price']} 🪙</b>\n"
+            f"Твой баланс: <b>{p['coins']} 🪙</b> (не хватает <b>{deficit} 🪙</b>)\n\n"
+            "Пополни баланс монет за Telegram Stars ⭐️!",
+            not_enough_coins_kb("cases")
+        )
 
     await cb.answer("🧰 Открываем сундук...")
     _, kind, value = roll_case(key)
@@ -211,7 +244,17 @@ async def cb_coin_buy(cb: CallbackQuery):
     if key == "insurance" and p.get("has_insurance"):
         return await cb.answer("У тебя уже действует страховка! 🛡", show_alert=True)
     if not await db.spend_coins(uid, item["price"], reason=f"Покупка: {item['name']}"):
-        return await cb.answer("Недостаточно монет 🪙", show_alert=True)
+        deficit = item["price"] - p["coins"]
+        await cb.answer()
+        return await safe_edit(
+            cb,
+            f"🪙 <b>НЕ ХВАТАЕТ МОНЕТ!</b>\n\n"
+            f"Товар: <b>{item['name']}</b>\n"
+            f"Цена: <b>{item['price']} 🪙</b> · У тебя: <b>{p['coins']} 🪙</b>\n"
+            f"Не хватает: <b>{deficit} 🪙</b>\n\n"
+            "Пополни баланс за Telegram Stars ⭐️ в звёздном магазине!",
+            not_enough_coins_kb("cshop")
+        )
 
     await cb.answer()
     result = ""

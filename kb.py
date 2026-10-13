@@ -112,17 +112,34 @@ def shop_list_kb(cars: list, level: int, owned: set) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def buy_confirm_kb(car_key: str, cls: str, can_buy: bool) -> InlineKeyboardMarkup:
+def buy_confirm_kb(car_key: str, cls: str, can_buy: bool, need_coins: bool = False) -> InlineKeyboardMarkup:
     rows = []
     if can_buy:
         rows.append([Btn(text="✅ Купить", callback_data=f"buy_yes:{car_key}")])
+    elif need_coins:
+        rows.append([Btn(text="⭐️ Пополнить монеты (Stars)", callback_data="stars_shop")])
     rows.append([Btn(text="◀️ Назад к классу", callback_data=f"shop_class:{cls}"),
                  Btn(text="🏪 К классам", callback_data="shop")])
     rows.append([Btn(text="🏠 Главное меню", callback_data="menu")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def race_menu_kb() -> InlineKeyboardMarkup:
+def no_energy_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="⚡ Полный бак + Нитро (15 ⭐️)", callback_data="stars:view:energy_nitro")],
+        [Btn(text="🪙 Заправить за 60 🪙", callback_data="cbuy:energy_refill")],
+        [Btn(text="◀️ Назад к гонкам", callback_data="race"), Btn(text="🏠 Главное меню", callback_data="menu")],
+    ])
+
+
+def not_enough_coins_kb(back_target: str = "shop") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="⭐️ Пополнить монеты (Stars)", callback_data="stars_shop")],
+        [Btn(text="◀️ Назад", callback_data=back_target), Btn(text="🏠 Главное меню", callback_data="menu")],
+    ])
+
+
+def race_menu_kb(energy: int = 10) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.row(Btn(text="🏎 Одиночный заезд с подарками 🎁", callback_data="race_solo"))
     b.row(
@@ -146,18 +163,25 @@ def race_menu_kb() -> InlineKeyboardMarkup:
         Btn(text="🧠 Викторина AMG", callback_data="rmode:quiz")
     )
     b.row(
+        Btn(text="⚡ Заправить бак (15 ⭐️)", callback_data="stars:view:energy_nitro"),
+        Btn(text="⭐️ Звёздный магазин", callback_data="stars_shop")
+    )
+    b.row(
         Btn(text="📋 Открытые дуэли", callback_data="race_pvp_list"),
         Btn(text="🏠 Главное меню", callback_data="menu")
     )
     return b.as_markup()
 
 
-def solo_race_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
+def solo_race_kb(energy: int = 10) -> InlineKeyboardMarkup:
+    rows = [
         [Btn(text="🟢 СТАРТ ЗАЕЗДА (-1 ⚡)", callback_data="race_solo_start")],
-        [Btn(text="◀️ Назад к гонкам", callback_data="race"),
-         Btn(text="🏠 Главное меню", callback_data="menu")],
-    ])
+    ]
+    if energy <= 2:
+        rows.append([Btn(text="⚡ Полный бак + Нитро (15 ⭐️)", callback_data="stars:view:energy_nitro")])
+    rows.append([Btn(text="◀️ Назад к гонкам", callback_data="race"),
+                 Btn(text="🏠 Главное меню", callback_data="menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def solo_race_result_kb() -> InlineKeyboardMarkup:
@@ -264,19 +288,25 @@ def tuning_kb(player_car: dict, coins: int) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def upgrade_confirm_kb(car_id: int, key: str, cost: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [Btn(text=f"✅ Улучшить за {fmt(cost)} 🪙", callback_data=f"upgrade_yes:{car_id}:{key}")],
-        [Btn(text="❌ Отмена (к тюнингу)", callback_data=f"tuning:{car_id}")],
-        [Btn(text="🚗 В гараж", callback_data="garage:0"), Btn(text="🏠 Главное меню", callback_data="menu")],
-    ])
+def upgrade_confirm_kb(car_id: int, key: str, cost: int, can_afford: bool = True) -> InlineKeyboardMarkup:
+    rows = []
+    if can_afford:
+        rows.append([Btn(text=f"✅ Улучшить за {fmt(cost)} 🪙", callback_data=f"upgrade_yes:{car_id}:{key}")])
+    else:
+        rows.append([Btn(text="⭐️ Пополнить монеты (Stars)", callback_data="stars_shop")])
+    rows.append([Btn(text="❌ Отмена (к тюнингу)", callback_data=f"tuning:{car_id}")])
+    rows.append([Btn(text="🚗 В гараж", callback_data="garage:0"), Btn(text="🏠 Главное меню", callback_data="menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def profile_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [Btn(text="🏅 Достижения", callback_data="profile_ach")],
-        [Btn(text="🏠 Главное меню", callback_data="menu")],
-    ])
+def profile_kb(is_vip: bool = False) -> InlineKeyboardMarkup:
+    rows = []
+    if not is_vip:
+        rows.append([Btn(text="👑 Стать VIP за 79 ⭐️", callback_data="stars:view:vip_7")])
+    rows.append([Btn(text="⭐️ Звёздный магазин", callback_data="stars_shop")])
+    rows.append([Btn(text="🏅 Достижения", callback_data="profile_ach")])
+    rows.append([Btn(text="🏠 Главное меню", callback_data="menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def top_kb(current: str) -> InlineKeyboardMarkup:
@@ -298,6 +328,7 @@ def daily_kb() -> InlineKeyboardMarkup:
 
 def coin_shop_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
+    b.button(text="⭐️ Купить монеты за Stars", callback_data="stars_shop")
     b.button(text="🧰 Открыть сундуки AMG", callback_data="cases")
     for key, item in COIN_SHOP.items():
         if key.startswith("case_"):
@@ -313,6 +344,7 @@ def cases_kb() -> InlineKeyboardMarkup:
     for key, c_info in CASES.items():
         b.button(text=f"{c_info['emoji']} {c_info['name']} — {c_info['price']} 🪙", callback_data=f"case_open:{key}")
     b.adjust(1)
+    b.row(Btn(text="⭐️ Пополнить монеты (Stars)", callback_data="stars_shop"))
     b.row(Btn(text="🪙 Магазин монет", callback_data="cshop"), Btn(text="🏠 Главное меню", callback_data="menu"))
     return b.as_markup()
 

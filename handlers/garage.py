@@ -239,8 +239,12 @@ async def cb_upgrade(cb: CallbackQuery):
             fmt_s = "{:.1f}" if k == "acceleration" else "{:.0f}"
             diff.append(f"{n}: {fmt_s.format(old[k])} → <b>{fmt_s.format(new[k])}</b>")
     diff.append(f"📊 Рейтинг: {old['rating']} → <b>{new['rating']}</b>")
+    p = await db.get_player(cb.from_user.id)
+    can_afford = (p["coins"] >= cost)
+    warn_text = "" if can_afford else f"\n\n⚠️ <i>Не хватает {fmt(cost - p['coins'])} монет. Пополни в магазине звёзд!</i>"
     await safe_edit(cb, f"{u['emoji']} <b>{u['name']}</b>: ур. {lvl} → {lvl + 1}\n\n" + "\n".join(diff) +
-                    f"\n\n🪙 Стоимость: <b>{fmt(cost)} монет</b>", upgrade_confirm_kb(pc["id"], key, cost))
+                    f"\n\n🪙 Стоимость: <b>{fmt(cost)} монет</b>{warn_text}",
+                    upgrade_confirm_kb(pc["id"], key, cost, can_afford=can_afford))
 
 
 @router.callback_query(F.data.startswith("upgrade_yes:"))
@@ -255,8 +259,19 @@ async def cb_upgrade_yes(cb: CallbackQuery):
         return
     cost = get_upgrade_cost(CAR_CATALOG[pc["car_key"]]["price"], key, lvl)
     if not await db.spend_coins(cb.from_user.id, cost, reason=f"Тюнинг {key}"):
-        await cb.answer("Недостаточно монет! 🪙", show_alert=True)
-        return
+        from kb import not_enough_coins_kb
+        p = await db.get_player(cb.from_user.id)
+        deficit = cost - p["coins"]
+        await cb.answer()
+        return await safe_edit(
+            cb,
+            f"🔧 <b>НЕ ХВАТАЕТ МОНЕТ ДЛЯ ТЮНИНГА!</b>\n\n"
+            f"Деталь: {UPGRADE_DEFS[key]['emoji']} <b>{UPGRADE_DEFS[key]['name']}</b>\n"
+            f"Стоимость: <b>{fmt(cost)} 🪙</b> · У тебя: <b>{fmt(p['coins'])} 🪙</b>\n"
+            f"Не хватает: <b>{fmt(deficit)} 🪙</b>\n\n"
+            "Пополни баланс монет за Telegram Stars ⭐️ без ожидания!",
+            not_enough_coins_kb(f"tuning:{pc['id']}")
+        )
     await db.upgrade_car(pc["id"], key, lvl + 1)
     await cb.answer(f"✅ {UPGRADE_DEFS[key]['name']} улучшен до {lvl + 1} уровня!")
     ach = await award_achievements(cb.from_user.id)

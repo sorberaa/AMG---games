@@ -27,31 +27,47 @@ async def profile_text(uid: int) -> str:
     nitro_t = " · 🔥 <i>Нитро-буст</i>" if db.is_nitro_boosted(p) else ""
     ins_t = "🛡 Страховка: <b>Активна</b>" if p.get("has_insurance") else "🛡 Страховка: <i>Нет</i>"
     wrap_t = " · ✨ <i>Золотой винил</i>" if p.get("gold_wrap") else ""
+
+    vip_promo = ""
+    if not db.is_vip(p):
+        vip_promo = (
+            "\n\n━━━━━━━━━━━━━━━━━━━━\n"
+            "👑 <b>СТАТУС VIP-ГОНЩИКА AMG</b>\n"
+            "• Корона 👑 возле ника в рейтингах и чатах\n"
+            "• Постоянный бак <b>13⚡ энергии</b> вместо 10\n"
+            "• +60 монет 🪙 и бесплатные вращения колеса фортуны\n"
+            "👉 <i>Доступен в магазине Stars от 79 ⭐️</i>"
+        )
+
     return (
         f"👤 <b>{p['first_name']}</b>{vip_badge}\n\n"
         f"📊 Уровень <b>{p['level']}</b>\n{bar} {p['xp']}/{need} XP\n\n"
         f"🪙 Баланс: <b>{fmt(p['coins'])} монет</b>\n"
-        f"{ins_t}{wrap_t}{nitro_t}\n"
-
+        f"{ins_t}{wrap_t}{nitro_t}\n\n"
         f"⚡ Энергия: {p['energy']}/{p['max_energy']}\n"
         f"⭐ Репутация: {p['reputation']}\n\n"
         f"🏁 Гонок: {p['races_total']} · 🏆 {p['wins']} · 💀 {p['losses']}\n"
         f"📈 Винрейт: {wr}% · ⚔️ PvP-побед: {p['pvp_wins']}\n"
         f"🚗 Машин: {len(cars)} · Основная: {CAR_CATALOG[pc['car_key']]['name'] if pc else '—'}\n"
         f"🔥 Стрик: {p['daily_streak']} дн. · 🏅 Достижений: {len(ach)}/{len(ACHIEVEMENTS_DEF)}"
+        f"{vip_promo}"
     )
 
 
 
 @router.message(Command("profile"))
 async def cmd_profile(message: Message):
-    await send_menu(message, message.from_user.id, await profile_text(message.from_user.id), profile_kb())
+    uid = message.from_user.id
+    p = await db.get_player(uid)
+    await send_menu(message, uid, await profile_text(uid), profile_kb(db.is_vip(p)))
 
 
 @router.callback_query(F.data == "profile")
 async def cb_profile(cb: CallbackQuery):
     await cb.answer()
-    await safe_edit(cb, await profile_text(cb.from_user.id), profile_kb())
+    uid = cb.from_user.id
+    p = await db.get_player(uid)
+    await safe_edit(cb, await profile_text(uid), profile_kb(db.is_vip(p)))
 
 
 @router.callback_query(F.data == "profile_ach")

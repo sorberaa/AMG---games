@@ -16,11 +16,18 @@ def menu_text(p: dict) -> str:
     from utils import is_salt_boosted
     vip_indicator = " 👑" if db.is_vip(p) else ""
     salt_indicator = " · 🧂 <b>СОЛЬ (+25% 🚀)</b>" if is_salt_boosted(p) else ""
+    nitro_indicator = " · 🔥 <b>НИТРО (+15%)</b>" if db.is_nitro_boosted(p) else ""
+    vip_status_line = "👑 <i>VIP-пилот AMG активен</i>\n" if db.is_vip(p) else ""
     return (
-        f"{gif_tag}🏎 <b>AMG RACING</b>\n\n"
-        f"👤 {p['first_name']}{vip_indicator} · ур. <b>{p['level']}</b>\n"
-        f"🪙 <b>{fmt(p['coins'])} монет</b> · ⚡ {p['energy']}/{p['max_energy']}{salt_indicator}\n\n"
-        "Выбери раздел:"
+        f"{gif_tag}🏎 <b>MERCEDES-AMG MOTORSPORT</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 Пилот: <b>{p['first_name']}</b>{vip_indicator}\n"
+        f"📊 Уровень <b>{p['level']}</b> · ⭐ Репутация: <b>{p['reputation']}</b>\n"
+        f"🪙 Баланс: <b>{fmt(p['coins'])} монет</b>\n"
+        f"⚡ Энергия: <b>{p['energy']}/{p['max_energy']}</b>{salt_indicator}{nitro_indicator}\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"{vip_status_line}"
+        "Выбери раздел гаража или заезда:"
     )
 
 

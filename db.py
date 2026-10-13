@@ -12,8 +12,9 @@ try:
 except ImportError:
     asyncpg = None
 
-from config import DATABASE_PATH, DATABASE_URL, COINS_SOFT_CAP, COINS_HARD_CAP
+from config import DATABASE_PATH, DATABASE_URL, COINS_SOFT_CAP, COINS_HARD_CAP, COINS_MAX_DAY
 from data import xp_for_level, ENERGY_REGEN_MINUTES
+
 
 logger = logging.getLogger("amg.db")
 TS_FMT = "%Y-%m-%d %H:%M:%S"
@@ -811,9 +812,14 @@ async def add_coins_admin(user_id: int, amount: int, reason: str = "Выдача
 
 async def grant_coins(user_id: int, base_amount: int, reason: str = "Награда за заезд") -> int:
     """
-    Начисляет монеты игроку с соблюдением дневных лимитов (COINS_SOFT_CAP=180, COINS_HARD_CAP=250).
-    Предотвращает любые скриптовые накрутки и дюпы.
-    Возвращает фактически начисленное количество монет.
+    Начисляет монеты игроку с плавным прогрессивным распределением.
+    Цель: 2000-3000 монет в неделю (~300-450 монет в день).
+    Прогресс идёт ПОСТЕПЕННО, поддерживая интерес в течение всего дня:
+    • 0..200 монет: 100% награды (стабильный бодрый старт)
+    • 200..320 монет: 85%..70% (мягкое комфортное замедление)
+    • 320..420 монет: 65%..45% (стабильный фарм с ощутимым приростом)
+    • 420..480 монет: 35%..20% (плавное завершение дневного цикла)
+    • 480+: кап
     """
     if base_amount <= 0:
         return 0
@@ -828,25 +834,39 @@ async def grant_coins(user_id: int, base_amount: int, reason: str = "Награ�
         if date != today:
             earned = 0
 
-        if earned < COINS_SOFT_CAP:
-            amount = min(base_amount, COINS_SOFT_CAP - earned) + max(
-                0, int((base_amount - (COINS_SOFT_CAP - earned)) * 0.5)
-            )
-        elif earned < COINS_HARD_CAP:
-            left = (COINS_HARD_CAP - earned) / max(1, (COINS_HARD_CAP - COINS_SOFT_CAP))
-            amount = max(1, int(base_amount * left * random.uniform(0.3, 0.6)))
+        if earned < 200:
+            mult = 1.0
+        elif earned < COINS_SOFT_CAP:  # 200..320
+            progress = (earned - 200) / max(1, (COINS_SOFT_CAP - 200))
+            mult = 0.85 - progress * 0.15  # 0.85 -> 0.70
+        elif earned < 420:  # 320..420
+            progress = (earned - COINS_SOFT_CAP) / 100.0
+            mult = 0.65 - progress * 0.20  # 0.65 -> 0.45
+        elif earned < COINS_MAX_DAY:  # 420..480
+            progress = (earned - 420) / max(1, (COINS_MAX_DAY - 420))
+            mult = 0.35 - progress * 0.15  # 0.35 -> 0.20
         else:
-            amount = 1 if random.random() < 0.20 else 0
+            mult = 0.0
 
-        amount = max(0, amount)
-        await db.execute(
-            "UPDATE players SET coins = coins + ?, money = money + ?, coins_today = ?, coins_date = ? WHERE user_id = ?",
-            (amount, amount, earned + amount, today, user_id),
-        )
-        await db.commit()
+        if mult > 0:
+            amount = max(1, int(round(base_amount * mult)))
+        else:
+            amount = 0
+
+        # Не даем превысить абсолютный дневной лимит защиты от скриптов
+        if earned + amount > COINS_MAX_DAY:
+            amount = max(0, COINS_MAX_DAY - earned)
+
+        if amount > 0:
+            await db.execute(
+                "UPDATE players SET coins = coins + ?, money = money + ?, coins_today = ?, coins_date = ? WHERE user_id = ?",
+                (amount, amount, earned + amount, today, user_id),
+            )
+            await db.commit()
     if amount > 0:
         await log_coin_tx(user_id, amount, reason)
     return amount
+
 
 
 

@@ -9,7 +9,7 @@ import data
 from data import CAR_CATALOG, STREET_OPPONENTS, fmt
 from engine import calc_rewards, calc_stats, car_upgrades, simulate_race
 from kb import (
-    back_kb, pvp_bet_kb, pvp_challenge_kb, pvp_list_kb,
+    back_kb, no_energy_kb, pvp_bet_kb, pvp_challenge_kb, pvp_list_kb,
     race_menu_kb, race_result_kb, solo_race_kb, solo_race_result_kb, street_opponents_kb
 )
 from utils import award_achievements, safe_edit, send_menu
@@ -63,13 +63,17 @@ async def race_menu_text(uid: int) -> str:
 
 @router.message(Command("race"))
 async def cmd_race(message: Message):
-    await send_menu(message, message.from_user.id, await race_menu_text(message.from_user.id), race_menu_kb())
+    uid = message.from_user.id
+    energy = await db.regen_energy(uid)
+    await send_menu(message, uid, await race_menu_text(uid), race_menu_kb(energy))
 
 
 @router.callback_query(F.data == "race")
 async def cb_race(cb: CallbackQuery):
     await cb.answer()
-    await safe_edit(cb, await race_menu_text(cb.from_user.id), race_menu_kb())
+    uid = cb.from_user.id
+    energy = await db.regen_energy(uid)
+    await safe_edit(cb, await race_menu_text(uid), race_menu_kb(energy))
 
 
 async def solo_race_view(uid: int):
@@ -93,7 +97,7 @@ async def solo_race_view(uid: int):
         "• 🎁 <b>Случайный подарок:</b> шанс выиграть бонусные монеты или восстановление энергии!\n\n"
         "<i>🔥 Главные командные соревнования, битва за кубки и дуэли со ставками — в командных чатах (/tournament, /duel, /boss)!</i>"
     )
-    return text, solo_race_kb()
+    return text, solo_race_kb(energy)
 
 
 @router.callback_query(F.data == "race_solo")
@@ -133,8 +137,18 @@ async def cb_solo_race_start(cb: CallbackQuery):
         return await cb.answer("Сначала выбери машину в гараже!", show_alert=True)
     if not await db.use_energy(uid):
         wait = await db.minutes_to_next_energy(uid)
-        return await cb.answer(f"⚡ Нет энергии! Следующая через {wait} мин.\nМожно восполнить в магазине монет 🪙",
-                               show_alert=True)
+        await cb.answer()
+        gif_tag = f"<a href='{data.AMG_GIFS['race']}'>&#8205;</a>"
+        return await safe_edit(
+            cb,
+            f"{gif_tag}⚡ <b>ТОПЛИВНЫЙ БАК ПУСТ!</b>\n\n"
+            f"Вся энергия израсходована. Следующая единица восстановится через <b>{wait} мин</b>.\n\n"
+            "Не хочешь прерывать заезды? Заправься экспрессом:\n"
+            "• ⚡ <b>100% энергии (полный бак)</b>\n"
+            "• 🔥 <b>Нитро-ускорение (+15% к скорости)</b> на 2 часа во всех заездах!\n\n"
+            "⭐️ <i>Всего 15 Telegram Stars или 60 игровых монет 🪙</i>",
+            no_energy_kb()
+        )
     await cb.answer("🏁 Погнали!")
     p = await db.get_player(uid)
     my_car = CAR_CATALOG[pc["car_key"]]
