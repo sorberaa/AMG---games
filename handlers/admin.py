@@ -29,8 +29,10 @@ def main_kb() -> InlineKeyboardMarkup:
         [Btn(text="📊 Статистика", callback_data="adm:stats"), Btn(text="🪙 Приход/Уход монет", callback_data="adm:coin_flow")],
         [Btn(text="👥 Игроки", callback_data="adm:players:0"), Btn(text="🔎 Найти игрока", callback_data="adm:find")],
         [Btn(text="👑 Список админов", callback_data="adm:admins"), Btn(text="📢 Рассылка", callback_data="adm:broadcast")],
+        [Btn(text="💾 База данных", callback_data="adm:db_info")],
         [Btn(text="✖️ Закрыть", callback_data="adm:close")],
     ])
+
 
 
 
@@ -69,6 +71,27 @@ async def cmd_admin(message: Message, state: FSMContext):
         return await message.answer("❌ У вас нет доступа к админ-панели.")
     await state.clear()
     await message.answer(MAIN_TEXT, reply_markup=main_kb())
+
+
+@router.message(Command("db"))
+async def cmd_db(message: Message):
+    if not is_admin(message.from_user.id):
+        return await message.answer("❌ У вас нет доступа к этой команде.")
+    info = await db.get_db_status()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="🔄 Обновить", callback_data="adm:db_info"), Btn(text="💾 Сделать JSON бэкап", callback_data="adm:db_backup")],
+        [Btn(text="✖️ Закрыть", callback_data="adm:close")]
+    ])
+    text = (
+        "💾 <b>Статус базы данных AMG Racing</b>\n\n"
+        f"⚙️ <b>Движок:</b> {info.get('engine', 'Неизвестно')}\n"
+        f"🛡 <b>Постоянное хранилище:</b> {'✅ ДА (данные сохраняются при любых деплоях)' if info.get('persistent') else '⚠️ НЕТ (SQLite файл)'}\n"
+        f"👥 <b>Игроков в базе:</b> {info.get('players', 0)}\n"
+        f"🚗 <b>Машин в базе:</b> {info.get('cars', 0)}\n\n"
+        f"ℹ️ <i>{info.get('status_text', '')}</i>"
+    )
+    await message.answer(text, reply_markup=kb)
+
 
 
 @router.message(Command("addadmin"))
@@ -191,11 +214,34 @@ async def adm_router(cb: CallbackQuery, state: FSMContext):
         await toggle_admin(cb, int(parts[2]))
     elif action == "toggle_ban":
         await toggle_ban(cb, int(parts[2]))
+    elif action == "db_info":
+        await show_db_info(cb)
+    elif action == "db_backup":
+        await db.backup_sqlite_to_json()
+        await cb.answer("✅ Резервный бэкап сохранен в data/backup_amg_game.json", show_alert=True)
+        await show_db_info(cb)
     elif action == "act":
         await start_action(cb, state, parts[2], int(parts[3]))
 
 
 # ── Экраны ───────────────────────────────────────────────────
+
+async def show_db_info(cb: CallbackQuery):
+    info = await db.get_db_status()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="🔄 Обновить", callback_data="adm:db_info"), Btn(text="💾 Сделать JSON бэкап", callback_data="adm:db_backup")],
+        [Btn(text="◀️ В админку", callback_data="adm:main")]
+    ])
+    text = (
+        "💾 <b>Статус базы данных AMG Racing</b>\n\n"
+        f"⚙️ <b>Движок:</b> {info.get('engine', 'Неизвестно')}\n"
+        f"🛡 <b>Постоянное хранилище:</b> {'✅ ДА (данные сохраняются при любых обновлениях)' if info.get('persistent') else '⚠️ НЕТ (локальный SQLite)'}\n"
+        f"👥 <b>Игроков в базе:</b> {info.get('players', 0)}\n"
+        f"🚗 <b>Машин в базе:</b> {info.get('cars', 0)}\n\n"
+        f"ℹ️ <i>{info.get('status_text', '')}</i>"
+    )
+    await safe_edit(cb, text, kb)
+
 
 async def show_stats(cb: CallbackQuery):
     s = await db.server_stats()

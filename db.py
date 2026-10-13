@@ -1,14 +1,31 @@
-"""Асинхронный слой БД (SQLite)."""
+"""Асинхронный слой БД (SQLite + PostgreSQL)."""
 import os
+import re
+import json
+import logging
 import random
 from datetime import datetime, timedelta
 
 import aiosqlite
+try:
+    import asyncpg
+except ImportError:
+    asyncpg = None
 
-from config import DATABASE_PATH, COINS_SOFT_CAP, COINS_HARD_CAP
+from config import DATABASE_PATH, DATABASE_URL, COINS_SOFT_CAP, COINS_HARD_CAP
 from data import xp_for_level, ENERGY_REGEN_MINUTES
 
+logger = logging.getLogger("amg.db")
 TS_FMT = "%Y-%m-%d %H:%M:%S"
+BACKUP_PATH = "data/backup_amg_game.json"
+
+_pg_pool = None
+_is_pg = False
+
+
+def is_postgres() -> bool:
+    return _is_pg and _pg_pool is not None
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS players (
@@ -37,15 +54,18 @@ CREATE TABLE IF NOT EXISTS players (
     has_insurance INTEGER DEFAULT 0,
     last_coin_duel TEXT DEFAULT NULL,
     chat_nitro_until TEXT DEFAULT NULL,
+    salt_boost_until TEXT DEFAULT NULL,
+    last_salt_boost_date TEXT DEFAULT NULL,
     gold_wrap INTEGER DEFAULT 0,
     defeated_opponents INTEGER DEFAULT 0,
     easy_races_today INTEGER DEFAULT 0,
     easy_races_date TEXT DEFAULT NULL,
+    last_wheel_spin TEXT DEFAULT NULL,
+    last_adventure TEXT DEFAULT NULL,
     created_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS player_cars (
-
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     car_key TEXT NOT NULL,
@@ -56,6 +76,12 @@ CREATE TABLE IF NOT EXISTS player_cars (
     nitro_level INTEGER DEFAULT 0,
     ecu_level INTEGER DEFAULT 0,
     body_kit_level INTEGER DEFAULT 0,
+    exhaust_level INTEGER DEFAULT 0,
+    transmission_level INTEGER DEFAULT 0,
+    brakes_level INTEGER DEFAULT 0,
+    intercooler_level INTEGER DEFAULT 0,
+    intake_level INTEGER DEFAULT 0,
+    downpipe_level INTEGER DEFAULT 0,
     total_races INTEGER DEFAULT 0,
     total_wins INTEGER DEFAULT 0,
     color TEXT DEFAULT NULL,
@@ -68,7 +94,7 @@ CREATE TABLE IF NOT EXISTS races (
     challenger_car_id INTEGER NOT NULL,
     opponent_car_id INTEGER DEFAULT NULL,
     bet INTEGER DEFAULT 0,
-    bet_type TEXT DEFAULT 'money',
+    bet_type TEXT DEFAULT 'coins',
     status TEXT DEFAULT 'pending',
     winner_id INTEGER DEFAULT NULL,
     chat_id INTEGER DEFAULT NULL,
@@ -93,6 +119,7 @@ CREATE TABLE IF NOT EXISTS bosses (
     boss_car TEXT NOT NULL,
     max_hp INTEGER NOT NULL,
     current_hp INTEGER NOT NULL,
+    rage_phase INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS boss_damage (
@@ -109,6 +136,128 @@ CREATE TABLE IF NOT EXISTS withdrawals (
     status TEXT DEFAULT 'pending',
     created_at TEXT DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS game_cooldowns (
+    target_key TEXT PRIMARY KEY,
+    last_ts REAL NOT NULL
+);
+"""
+
+PG_SCHEMA = """
+CREATE TABLE IF NOT EXISTS players (
+    user_id BIGINT PRIMARY KEY,
+    username TEXT,
+    first_name TEXT,
+    level INTEGER DEFAULT 1,
+    xp INTEGER DEFAULT 0,
+    money INTEGER DEFAULT 500,
+    coins INTEGER DEFAULT 500,
+    coins_today INTEGER DEFAULT 0,
+    coins_date TEXT DEFAULT NULL,
+    reputation INTEGER DEFAULT 0,
+    wins INTEGER DEFAULT 0,
+    losses INTEGER DEFAULT 0,
+    races_total INTEGER DEFAULT 0,
+    pvp_wins INTEGER DEFAULT 0,
+    daily_streak INTEGER DEFAULT 0,
+    last_daily TEXT DEFAULT NULL,
+    selected_car_id INTEGER DEFAULT NULL,
+    energy INTEGER DEFAULT 10,
+    max_energy INTEGER DEFAULT 10,
+    last_energy_update TEXT DEFAULT NULL,
+    is_admin INTEGER DEFAULT 0,
+    is_banned INTEGER DEFAULT 0,
+    has_insurance INTEGER DEFAULT 0,
+    last_coin_duel TEXT DEFAULT NULL,
+    chat_nitro_until TEXT DEFAULT NULL,
+    salt_boost_until TEXT DEFAULT NULL,
+    last_salt_boost_date TEXT DEFAULT NULL,
+    gold_wrap INTEGER DEFAULT 0,
+    defeated_opponents INTEGER DEFAULT 0,
+    easy_races_today INTEGER DEFAULT 0,
+    easy_races_date TEXT DEFAULT NULL,
+    last_wheel_spin TEXT DEFAULT NULL,
+    last_adventure TEXT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS player_cars (
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    car_key TEXT NOT NULL,
+    engine_level INTEGER DEFAULT 0,
+    turbo_level INTEGER DEFAULT 0,
+    suspension_level INTEGER DEFAULT 0,
+    tires_level INTEGER DEFAULT 0,
+    nitro_level INTEGER DEFAULT 0,
+    ecu_level INTEGER DEFAULT 0,
+    body_kit_level INTEGER DEFAULT 0,
+    exhaust_level INTEGER DEFAULT 0,
+    transmission_level INTEGER DEFAULT 0,
+    brakes_level INTEGER DEFAULT 0,
+    intercooler_level INTEGER DEFAULT 0,
+    intake_level INTEGER DEFAULT 0,
+    downpipe_level INTEGER DEFAULT 0,
+    total_races INTEGER DEFAULT 0,
+    total_wins INTEGER DEFAULT 0,
+    color TEXT DEFAULT NULL,
+    purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS races (
+    id SERIAL PRIMARY KEY,
+    challenger_id BIGINT NOT NULL,
+    opponent_id BIGINT DEFAULT NULL,
+    challenger_car_id INTEGER NOT NULL,
+    opponent_car_id INTEGER DEFAULT NULL,
+    bet INTEGER DEFAULT 0,
+    bet_type TEXT DEFAULT 'coins',
+    status TEXT DEFAULT 'pending',
+    winner_id BIGINT DEFAULT NULL,
+    chat_id BIGINT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS achievements (
+    user_id BIGINT NOT NULL,
+    achievement_key TEXT NOT NULL,
+    unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, achievement_key)
+);
+
+CREATE TABLE IF NOT EXISTS coin_transactions (
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    amount INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS bosses (
+    chat_id BIGINT PRIMARY KEY,
+    boss_name TEXT NOT NULL,
+    boss_car TEXT NOT NULL,
+    max_hp INTEGER NOT NULL,
+    current_hp INTEGER NOT NULL,
+    rage_phase INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS boss_damage (
+    chat_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    damage INTEGER DEFAULT 0,
+    PRIMARY KEY (chat_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS withdrawals (
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    amount INTEGER NOT NULL,
+    wallet_info TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS game_cooldowns (
     target_key TEXT PRIMARY KEY,
     last_ts REAL NOT NULL
@@ -132,16 +281,309 @@ def now_str() -> str:
     return datetime.utcnow().strftime(TS_FMT)
 
 
+def to_pg_query(sql: str) -> str:
+    # 1. Replace INSERT OR IGNORE INTO
+    sql = re.sub(r'INSERT\s+OR\s+IGNORE\s+INTO\s+([a-zA-Z0-9_]+)', r'INSERT INTO \1', sql, flags=re.IGNORECASE)
+    if 'ON CONFLICT' not in sql.upper() and re.search(r'INSERT\s+INTO\s+(players|achievements)\b', sql, re.IGNORECASE):
+        sql += ' ON CONFLICT DO NOTHING'
+        
+    # 2. Fix multi-arg scalar MAX(a, b) and MIN(a, b) -> GREATEST / LEAST
+    sql = re.sub(r'\bMAX\s*\(\s*([^,()]+)\s*,\s*([^)]+)\)', r'GREATEST(\1, \2)', sql, flags=re.IGNORECASE)
+    sql = re.sub(r'\bMIN\s*\(\s*([^,()]+)\s*,\s*([^)]+)\)', r'LEAST(\1, \2)', sql, flags=re.IGNORECASE)
+    
+    # 3. Replace ? placeholders with $1, $2, ...
+    parts = sql.split('?')
+    if len(parts) > 1:
+        res = []
+        for i, part in enumerate(parts[:-1]):
+            res.append(part)
+            res.append(f"${i+1}")
+        res.append(parts[-1])
+        sql = "".join(res)
+        
+    # 4. Handle auto-id return
+    if re.search(r'INSERT\s+INTO\s+(player_cars|races|withdrawals|coin_transactions)\b', sql, re.IGNORECASE):
+        if 'RETURNING' not in sql.upper():
+            sql += ' RETURNING id'
+            
+    return sql
+
+
+class PGCursorWrapper:
+    def __init__(self, rows: list, rowcount: int = 0, lastrowid: int | None = None):
+        self._rows = rows
+        self._idx = 0
+        self.rowcount = rowcount
+        self.lastrowid = lastrowid
+
+    async def fetchone(self):
+        if self._idx < len(self._rows):
+            r = self._rows[self._idx]
+            self._idx += 1
+            return r
+        return None
+
+    async def fetchall(self):
+        r = self._rows[self._idx:]
+        self._idx = len(self._rows)
+        return r
+
+
+class PGConnWrapper:
+    def __init__(self, conn):
+        self.conn = conn
+        self.row_factory = None
+
+    async def execute(self, sql: str, params: tuple | list = ()):
+        if isinstance(params, (tuple, list)):
+            p_list = list(params)
+        else:
+            p_list = [params] if params is not None else []
+
+        pg_sql = to_pg_query(sql)
+
+        if "RETURNING ID" in pg_sql.upper():
+            rows = await self.conn.fetch(pg_sql, *p_list)
+            lastrowid = rows[0]["id"] if rows else None
+            return PGCursorWrapper(rows, len(rows), lastrowid)
+
+        stripped = pg_sql.strip().upper()
+        if stripped.startswith("SELECT") or stripped.startswith("WITH"):
+            rows = await self.conn.fetch(pg_sql, *p_list)
+            return PGCursorWrapper(rows, len(rows))
+
+        status = await self.conn.execute(pg_sql, *p_list)
+        rowcount = 0
+        if status:
+            parts = status.split()
+            if parts and parts[-1].isdigit():
+                rowcount = int(parts[-1])
+        return PGCursorWrapper([], rowcount)
+
+    async def executescript(self, script: str):
+        await self.conn.execute(script)
+
+    async def commit(self):
+        pass
+
+
+class PGConnContext:
+    def __init__(self, pool):
+        self.pool = pool
+        self.conn = None
+        self.tx = None
+
+    async def __aenter__(self):
+        self.conn = await self.pool.acquire()
+        self.tx = self.conn.transaction()
+        await self.tx.start()
+        return PGConnWrapper(self.conn)
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        try:
+            if exc_type is not None:
+                await self.tx.rollback()
+            else:
+                await self.tx.commit()
+        except Exception:
+            pass
+        finally:
+            await self.pool.release(self.conn)
+
+
 def _connect():
+    if _is_pg and _pg_pool is not None:
+        return PGConnContext(_pg_pool)
     return aiosqlite.connect(DATABASE_PATH, timeout=30)
 
 
+async def backup_sqlite_to_json():
+    """Сохраняет полный снимок базы в JSON-файл для восстановления при перезапусках."""
+    try:
+        if is_postgres():
+            return
+        if not os.path.exists(DATABASE_PATH):
+            return
+        async with aiosqlite.connect(DATABASE_PATH) as s_db:
+            s_db.row_factory = aiosqlite.Row
+            data = {}
+            for table in ["players", "player_cars", "races", "achievements", "game_cooldowns", "bosses", "withdrawals"]:
+                try:
+                    cur = await s_db.execute(f"SELECT * FROM {table}")
+                    rows = [dict(r) for r in await cur.fetchall()]
+                    data[table] = rows
+                except Exception:
+                    pass
+            d = os.path.dirname(BACKUP_PATH)
+            if d:
+                os.makedirs(d, exist_ok=True)
+            with open(BACKUP_PATH, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"Failed to backup SQLite to JSON: {e}")
+
+
+async def restore_sqlite_from_json():
+    """Восстанавливает базу данных из JSON, если SQLite пуст или был стёрт."""
+    try:
+        if is_postgres():
+            return
+        if not os.path.exists(BACKUP_PATH):
+            return
+        async with aiosqlite.connect(DATABASE_PATH) as s_db:
+            cur = await s_db.execute("SELECT COUNT(*) FROM players")
+            row = await cur.fetchone()
+            if row and row[0] > 0:
+                return  # База уже не пуста
+            
+            with open(BACKUP_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            
+            players = data.get("players", [])
+            if not players:
+                return
+            logger.info(f"Обнаружен резервный бэкап! Восстанавливаем {len(players)} игроков...")
+            for p in players:
+                cols = [k for k in p.keys() if p[k] is not None]
+                placeholders = ["?"] * len(cols)
+                vals = [p[c] for c in cols]
+                q = f"INSERT OR IGNORE INTO players ({', '.join(cols)}) VALUES ({', '.join(placeholders)})"
+                await s_db.execute(q, vals)
+                
+            for c in data.get("player_cars", []):
+                cols = [k for k in c.keys() if c[k] is not None]
+                placeholders = ["?"] * len(cols)
+                vals = [c[k] for c in cols]
+                q = f"INSERT OR IGNORE INTO player_cars ({', '.join(cols)}) VALUES ({', '.join(placeholders)})"
+                await s_db.execute(q, vals)
+
+            for a in data.get("achievements", []):
+                await s_db.execute("INSERT OR IGNORE INTO achievements (user_id, achievement_key) VALUES (?, ?)",
+                                   (a["user_id"], a["achievement_key"]))
+                
+            for cd in data.get("game_cooldowns", []):
+                await s_db.execute("INSERT OR REPLACE INTO game_cooldowns (target_key, last_ts) VALUES (?, ?)",
+                                   (cd["target_key"], cd["last_ts"]))
+            await s_db.commit()
+            logger.info("Успешно восстановлено из резервного бэкапа!")
+    except Exception as e:
+        logger.warning(f"Failed to restore from backup JSON: {e}")
+
+
+async def migrate_sqlite_to_pg(sqlite_path: str):
+    if not os.path.exists(sqlite_path) or _pg_pool is None:
+        return
+    logger.info(f"Проверка данных SQLite в {sqlite_path} для переноса в PostgreSQL...")
+    try:
+        async with aiosqlite.connect(sqlite_path) as sdb:
+            sdb.row_factory = aiosqlite.Row
+            cur = await sdb.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='players'")
+            if not await cur.fetchone():
+                return
+            cur = await sdb.execute("SELECT * FROM players")
+            players = [dict(r) for r in await cur.fetchall()]
+            if not players:
+                return
+            logger.info(f"Найдено {len(players)} игроков в SQLite! Переносим в PostgreSQL...")
+            async with _pg_pool.acquire() as conn:
+                for p in players:
+                    cols = [k for k in p.keys() if p[k] is not None]
+                    placeholders = [f"${i+1}" for i in range(len(cols))]
+                    vals = [p[c] for c in cols]
+                    q = f"INSERT INTO players ({', '.join(cols)}) VALUES ({', '.join(placeholders)}) ON CONFLICT (user_id) DO NOTHING"
+                    await conn.execute(q, *vals)
+
+                cur = await sdb.execute("SELECT * FROM player_cars")
+                cars = [dict(r) for r in await cur.fetchall()]
+                for c in cars:
+                    cols = [k for k in c.keys() if c[k] is not None and k != 'id']
+                    placeholders = [f"${i+1}" for i in range(len(cols))]
+                    vals = [c[k] for c in cols]
+                    q = f"INSERT INTO player_cars ({', '.join(cols)}) VALUES ({', '.join(placeholders)})"
+                    await conn.execute(q, *vals)
+
+                cur = await sdb.execute("SELECT * FROM achievements")
+                achs = [dict(r) for r in await cur.fetchall()]
+                for a in achs:
+                    await conn.execute(
+                        "INSERT INTO achievements (user_id, achievement_key) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                        a["user_id"], a["achievement_key"]
+                    )
+
+                cur = await sdb.execute("SELECT * FROM game_cooldowns")
+                cds = [dict(r) for r in await cur.fetchall()]
+                for cd in cds:
+                    await conn.execute(
+                        "INSERT INTO game_cooldowns (target_key, last_ts) VALUES ($1, $2) ON CONFLICT (target_key) DO UPDATE SET last_ts = excluded.last_ts",
+                        cd["target_key"], cd["last_ts"]
+                    )
+            logger.info("Миграция существующих данных в PostgreSQL успешно завершена!")
+    except Exception as e:
+        logger.warning(f"Ошибка миграции SQLite -> PostgreSQL: {e}")
+
+
+async def get_db_status() -> dict:
+    if is_postgres():
+        async with _connect() as s_db:
+            cur = await s_db.execute("SELECT COUNT(*) FROM players")
+            p_cnt = (await cur.fetchone())[0]
+            cur = await s_db.execute("SELECT COUNT(*) FROM player_cars")
+            c_cnt = (await cur.fetchone())[0]
+        return {
+            "engine": "PostgreSQL 🐘",
+            "persistent": True,
+            "status_text": "Постоянная облачная база данных (данные защищены от перезапусков и обновлений)",
+            "players": p_cnt,
+            "cars": c_cnt,
+        }
+    else:
+        async with _connect() as s_db:
+            cur = await s_db.execute("SELECT COUNT(*) FROM players")
+            p_cnt = (await cur.fetchone())[0]
+            cur = await s_db.execute("SELECT COUNT(*) FROM player_cars")
+            c_cnt = (await cur.fetchone())[0]
+        return {
+            "engine": "SQLite 📁",
+            "persistent": False,
+            "path": DATABASE_PATH,
+            "status_text": "Локальный SQLite файл (подключите PostgreSQL в render.yaml/DATABASE_URL для 100% сохранности)",
+            "players": p_cnt,
+            "cars": c_cnt,
+        }
+
+
 async def init_db() -> None:
+    global _pg_pool, _is_pg
+
+    if DATABASE_URL and asyncpg:
+        try:
+            logger.info("Подключение к PostgreSQL базе данных...")
+            try:
+                _pg_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10, timeout=30)
+            except Exception as ssl_err:
+                logger.info(f"Прямое подключение требует SSL ({ssl_err}), повтор с ssl='require'...")
+                _pg_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10, timeout=30, ssl="require")
+
+            _is_pg = True
+            logger.info("✅ Успешно подключено к PostgreSQL! Все данные игроков сохраняются надежно.")
+
+            async with _pg_pool.acquire() as conn:
+                await conn.execute(PG_SCHEMA)
+                cnt = await conn.fetchval("SELECT COUNT(*) FROM players")
+                if cnt == 0 and os.path.exists(DATABASE_PATH):
+                    await migrate_sqlite_to_pg(DATABASE_PATH)
+            return
+        except Exception as e:
+            logger.error(f"Не удалось подключиться к PostgreSQL ({e}). Переходим на SQLite.")
+            _is_pg = False
+            _pg_pool = None
+
+    # SQLite fallback
     d = os.path.dirname(DATABASE_PATH)
     if d:
         os.makedirs(d, exist_ok=True)
-    async with _connect() as db:
-        await db.executescript(SCHEMA)
+    async with aiosqlite.connect(DATABASE_PATH, timeout=30) as s_db:
+        await s_db.executescript(SCHEMA)
         # Миграция существующих таблиц
         for col, typ in [
             ("has_insurance", "INTEGER DEFAULT 0"),
@@ -157,7 +599,7 @@ async def init_db() -> None:
             ("last_adventure", "TEXT DEFAULT NULL"),
         ]:
             try:
-                await db.execute(f"ALTER TABLE players ADD COLUMN {col} {typ}")
+                await s_db.execute(f"ALTER TABLE players ADD COLUMN {col} {typ}")
             except Exception:
                 pass
 
@@ -167,28 +609,27 @@ async def init_db() -> None:
             "intercooler_level", "intake_level", "downpipe_level"
         ]:
             try:
-                await db.execute(f"ALTER TABLE player_cars ADD COLUMN {u_col} INTEGER DEFAULT 0")
+                await s_db.execute(f"ALTER TABLE player_cars ADD COLUMN {u_col} INTEGER DEFAULT 0")
             except Exception:
                 pass
 
         try:
-            await db.execute("ALTER TABLE bosses ADD COLUMN rage_phase INTEGER DEFAULT 0")
-        except Exception:
-            pass
-
-
-        try:
-            await db.execute("ALTER TABLE player_cars ADD COLUMN color TEXT DEFAULT NULL")
+            await s_db.execute("ALTER TABLE bosses ADD COLUMN rage_phase INTEGER DEFAULT 0")
         except Exception:
             pass
 
         try:
-            await db.execute("ALTER TABLE races ADD COLUMN bet_type TEXT DEFAULT 'money'")
+            await s_db.execute("ALTER TABLE player_cars ADD COLUMN color TEXT DEFAULT NULL")
         except Exception:
             pass
 
         try:
-            await db.execute("""
+            await s_db.execute("ALTER TABLE races ADD COLUMN bet_type TEXT DEFAULT 'coins'")
+        except Exception:
+            pass
+
+        try:
+            await s_db.execute("""
                 CREATE TABLE IF NOT EXISTS game_cooldowns (
                     target_key TEXT PRIMARY KEY,
                     last_ts REAL NOT NULL
@@ -197,15 +638,10 @@ async def init_db() -> None:
         except Exception:
             pass
 
-        # Антиабуз санитарная очистка: сброс аномальных/дюпнутых балансов свыше 1,500 монет
-        try:
-            await db.execute("UPDATE players SET coins = MIN(coins, 1500), money = MIN(money, 1500) WHERE coins > 1500")
-            await db.commit()
-        except Exception:
-            pass
+        await s_db.execute("PRAGMA journal_mode=WAL")
+        await s_db.commit()
 
-        await db.execute("PRAGMA journal_mode=WAL")
-        await db.commit()
+    await restore_sqlite_from_json()
 
 
 

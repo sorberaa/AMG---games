@@ -5,6 +5,10 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 DATABASE_PATH = os.getenv("DATABASE_PATH", "data/amg_game.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = "postgresql://" + DATABASE_URL[len("postgres://"):]
+
 PORT = int(os.getenv("PORT", "10000"))
 ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
 SUPER_ADMINS = [8653358704, 8936384717]
