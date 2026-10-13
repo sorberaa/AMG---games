@@ -20,12 +20,14 @@ class Adm(StatesGroup):
     level = State()
     broadcast = State()
     add_admin = State()
+    remove_admin = State()
 
 
 # ── Клавиатуры ───────────────────────────────────────────────
 
 def main_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="⭐ Вывод звёзд (TON / Валюта)", callback_data="adm:stars_withdraw")],
         [Btn(text="📊 Статистика", callback_data="adm:stats"), Btn(text="🪙 Приход/Уход монет", callback_data="adm:coin_flow")],
         [Btn(text="👥 Игроки", callback_data="adm:players:0"), Btn(text="🔎 Найти игрока", callback_data="adm:find")],
         [Btn(text="👑 Список админов", callback_data="adm:admins"), Btn(text="📢 Рассылка", callback_data="adm:broadcast")],
@@ -392,6 +394,11 @@ async def adm_router(cb: CallbackQuery, state: FSMContext):
     elif action == "toggle_ban":
         await toggle_ban(cb, int(parts[2]))
 
+    elif action == "stars_withdraw":
+        await show_stars_withdraw(cb)
+    elif action == "remove_admin_prompt":
+        await state.set_state(Adm.remove_admin)
+        await safe_edit(cb, "🗑 <b>УДАЛЕНИЕ АДМИНИСТРАТОРА</b>\n\nОтправьте <b>Telegram ID</b> или <b>@username</b> администратора, которого нужно снять:\n\n<i>Для отмены напишите /admin</i>", back_kb("adm:admins"))
     elif action == "db_info":
         await show_db_info(cb)
     elif action == "db_backup":
@@ -532,7 +539,8 @@ async def show_admins(cb: CallbackQuery):
                 Btn(text="❌ Снять права", callback_data=f"adm:remove_admin:{uid}")
             ])
 
-    rows.append([Btn(text="➕ Ввести ID или переслать", callback_data="adm:add_admin")])
+    rows.append([Btn(text="➕ Ввести ID или переслать", callback_data="adm:add_admin"),
+                 Btn(text="🗑 Удалить админа", callback_data="adm:remove_admin_prompt")])
     rows.append([Btn(text="👥 Выбрать из списка игроков", callback_data="adm:pick_admin_user:0")])
     rows.append([Btn(text="◀️ Назад", callback_data="adm:main")])
 
@@ -825,5 +833,107 @@ async def on_add_admin(message: Message, state: FSMContext):
     )
 
 
-# ── Заявки на вывод (Админка) ─────────────────────────────────
+# ── Удаление админа по стейту ─────────────────────────────────
+
+@router.message(Adm.remove_admin)
+async def state_remove_admin(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return await message.answer("❌ Нет доступа к админ-панели.")
+
+    target_str = (message.text or "").strip()
+    target_id = None
+    target_name = None
+
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target_id = message.reply_to_message.from_user.id
+        target_name = message.reply_to_message.from_user.first_name
+    elif target_str.isdigit():
+        target_id = int(target_str)
+    else:
+        uname = target_str.lstrip("@").strip()
+        p = await db.get_player_by_username(uname)
+        if p:
+            target_id = p["user_id"]
+            target_name = p["first_name"]
+        else:
+            return await message.answer(
+                f"❌ Пользователь @{uname} не найден в базе бота.\n"
+                "Отправьте верный ID или @username (или напишите /admin для отмены):"
+            )
+
+    if target_id in ADMIN_IDS:
+        return await message.answer("❌ Главного создателя бота нельзя удалить!")
+    if target_id == message.from_user.id:
+        return await message.answer("❌ Нельзя удалить самого себя!")
+
+    p = await db.get_player(target_id)
+    if not p or not p.get("is_admin"):
+        return await message.answer("ℹ️ Этот пользователь не является администратором бота.")
+
+    await db.update_player(target_id, is_admin=0)
+    set_admin_cache(target_id, False)
+    await state.clear()
+    name = target_name or p.get("first_name", str(target_id))
+    try:
+        await message.bot.send_message(target_id, "ℹ️ Твои права администратора в AMG Racing были отозваны.")
+    except Exception:
+        pass
+
+    await message.answer(
+        f"✅ <b>Права администратора успешно сняты с {name}!</b>\n"
+        f"🆔 ID: <code>{target_id}</code>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [Btn(text="👑 К списку админов", callback_data="adm:admins")],
+            [Btn(text="🏠 В админку", callback_data="adm:main")]
+        ])
+    )
+
+
+# ── Вывод Звёзд Telegram Stars (Fragment / TON) ───────────────
+
+async def show_stars_withdraw(cb: CallbackQuery):
+    await cb.answer()
+    stats = await db.get_stars_stats()
+    all_stars = stats.get("all_stars", 0)
+    today_stars = stats.get("today_stars", 0)
+    tx_count = stats.get("tx_count", 0)
+
+    # Курс Telegram Stars: 1 Star ≈ 0.013$ / ~0.0026 TON / ~1.30 ₽
+    approx_usd = all_stars * 0.013
+    approx_rub = all_stars * 1.30
+    approx_ton = all_stars * 0.0026
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="🌐 Открыть Fragment.com (Вывод в TON)", url="https://fragment.com/stars")],
+        [Btn(text="🤖 Настройки бота в @BotFather", url="https://t.me/BotFather")],
+        [Btn(text="🔄 Обновить баланс", callback_data="adm:stars_withdraw")],
+        [Btn(text="◀️ В главное меню", callback_data="adm:main")]
+    ])
+
+    text = (
+        "⭐ <b>ВЫВОД ЗВЁЗД TELEGRAM STARS (XTR)</b> ⭐\n\n"
+        f"📊 <b>Статистика поступлений бота:</b>\n"
+        f"• Всего звёзд заработано: <b>{all_stars:,} ⭐️</b>\n"
+        f"• Сегодня получено: <b>{today_stars:,} ⭐️</b>\n"
+        f"• Успешных оплат: <b>{tx_count}</b>\n\n"
+        f"💵 <b>Примерная стоимость баланса:</b>\n"
+        f"• В криптовалюте: ~<b>{approx_ton:.2f} TON</b>\n"
+        f"• В рублях: ~<b>{approx_rub:,.0f} ₽</b>\n"
+        f"• В долларах: ~<b>${approx_usd:,.2f}</b>\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "💳 <b>КУДА И КАК ВЫВОДЯТСЯ ЗВЁЗДЫ:</b>\n\n"
+        "1. <b>Где они хранятся:</b>\n"
+        "Все полученные звёзды начисляются напрямую на баланс твоего бота в Telegram.\n\n"
+        "2. <b>В какую валюту выводятся:</b>\n"
+        "Звёзды выводятся в криптовалюту <b>TON (Toncoin)</b> через официальную платформу Павла Дурова — <b>Fragment.com</b>.\n\n"
+        "3. <b>Как перевести TON в валюту на карту:</b>\n"
+        "• Когда TON приходят на твой кошелёк (например, <b>@wallet</b> прямо в Telegram), нажми «P2P Маркет» ➔ «Продать».\n"
+        "• Выбираешь свой банк (Сбер, Т-Банк, СБП и др.), и деньги переводят прямо на твою карту!\n\n"
+        "4. <b>Как вывести прямо сейчас:</b>\n"
+        "• Нажми кнопку ниже <b>«Fragment.com»</b>, авторизуйся через свой Telegram и укажи свой TON-кошелек.\n"
+        "• Либо открой <b>@BotFather</b> ➔ <code>/mybots</code> ➔ твой бот ➔ <b>Bot Settings</b> ➔ <b>Payments</b> ➔ <b>Stars Balance</b> ➔ <b>Withdraw</b>.\n\n"
+        "⏳ <i>Правило Telegram: звёзды становятся доступны к выводу через 21 день после совершения платежа игроком.</i>"
+    )
+    await safe_edit(cb, text, kb)
+
 

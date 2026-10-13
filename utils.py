@@ -55,8 +55,18 @@ async def ensure_player(user: User) -> dict:
         car_id = await db.add_car(user.id, "c180")
         await db.select_car(user.id, car_id)
         p = await db.get_player(user.id)
-    elif p["username"] != user.username or p["first_name"] != (user.first_name or "Гонщик"):
-        await db.update_player(user.id, username=user.username, first_name=user.first_name or "Гонщик")
+    else:
+        # Проверяем, что у игрока есть хотя бы одна машина
+        cars = await db.get_player_cars(user.id)
+        if not cars:
+            car_id = await db.add_car(user.id, "c180")
+            await db.select_car(user.id, car_id)
+        elif not p.get("selected_car_id") or not any(c["id"] == p["selected_car_id"] for c in cars):
+            await db.select_car(user.id, cars[-1]["id"])
+            p = await db.get_player(user.id)
+
+        if p["username"] != user.username or p["first_name"] != (user.first_name or "Гонщик"):
+            await db.update_player(user.id, username=user.username, first_name=user.first_name or "Гонщик")
     return p
 
 

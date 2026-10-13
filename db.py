@@ -952,7 +952,16 @@ async def add_car(user_id: int, car_key: str) -> int:
     async with _connect() as db:
         cur = await db.execute("INSERT INTO player_cars (user_id, car_key) VALUES (?, ?)", (user_id, car_key))
         await db.commit()
-        return cur.lastrowid
+        last_id = cur.lastrowid
+        if not last_id:
+            cur2 = await db.execute("SELECT id FROM player_cars WHERE user_id = ? AND car_key = ? ORDER BY id DESC LIMIT 1", (user_id, car_key))
+            row = await cur2.fetchone()
+            last_id = row[0] if row else 1
+    try:
+        await backup_sqlite_to_json()
+    except Exception:
+        pass
+    return last_id
 
 
 async def remove_car(car_id: int) -> None:
@@ -960,6 +969,10 @@ async def remove_car(car_id: int) -> None:
         await db.execute("UPDATE players SET selected_car_id = NULL WHERE selected_car_id = ?", (car_id,))
         await db.execute("DELETE FROM player_cars WHERE id = ?", (car_id,))
         await db.commit()
+    try:
+        await backup_sqlite_to_json()
+    except Exception:
+        pass
 
 
 async def paint_car(car_id: int, color_key: str) -> None:
@@ -967,19 +980,36 @@ async def paint_car(car_id: int, color_key: str) -> None:
     async with _connect() as db:
         await db.execute("UPDATE player_cars SET color = ? WHERE id = ?", (color_key, car_id))
         await db.commit()
+    try:
+        await backup_sqlite_to_json()
+    except Exception:
+        pass
 
 
 async def select_car(user_id: int, car_id: int) -> None:
-    await update_player(user_id, selected_car_id=car_id)
+    if car_id:
+        await update_player(user_id, selected_car_id=car_id)
+        try:
+            await backup_sqlite_to_json()
+        except Exception:
+            pass
 
 
 async def get_selected_car(user_id: int):
     p = await get_player(user_id)
-    if not p or not p["selected_car_id"]:
+    if not p:
         return None
-    car = await get_car(p["selected_car_id"])
-    if car and car["user_id"] == user_id:
-        return car
+    sel_id = p.get("selected_car_id")
+    if sel_id:
+        car = await get_car(sel_id)
+        if car and car["user_id"] == user_id:
+            return car
+    # Если выбранная машина не найдена или не установлена — выбираем последнюю купленную
+    cars = await db_get_player_cars(user_id) if "db_get_player_cars" in globals() else await get_player_cars(user_id)
+    if cars:
+        latest = cars[-1]
+        await select_car(user_id, latest["id"])
+        return latest
     return None
 
 
