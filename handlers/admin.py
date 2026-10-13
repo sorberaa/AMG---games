@@ -167,8 +167,183 @@ async def cmd_addadmin(message: Message):
     )
 
 
+@router.message(Command("removeadmin"))
+@router.message(Command("deladmin"))
+async def cmd_removeadmin(message: Message):
+    if not is_admin(message.from_user.id):
+        return await message.answer("❌ Снимать админов могут только главные владельцы.")
+
+    target_id = None
+    target_name = None
+
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target_u = message.reply_to_message.from_user
+        target_id = target_u.id
+        target_name = target_u.first_name
+    else:
+        parts = message.text.split(maxsplit=1)
+        if len(parts) < 2:
+            return await message.answer(
+                "❌ <b>КАК СНЯТЬ АДМИНИСТРАТОРА:</b>\n\n"
+                "• <b>Способ 1:</b> ответьте на его сообщение командой <code>/removeadmin</code>\n"
+                "• <b>Способ 2:</b> <code>/removeadmin 123456789</code> (по Telegram ID)\n"
+                "• <b>Способ 3:</b> <code>/removeadmin @username</code>\n"
+                "• <b>Способ 4:</b> /admin ➔ «👑 Список админов» ➔ нажать «❌ Снять права»"
+            )
+        target_str = parts[1].strip()
+        if target_str.isdigit():
+            target_id = int(target_str)
+        else:
+            uname = target_str.lstrip("@").strip()
+            p = await db.get_player_by_username(uname)
+            if p:
+                target_id = p["user_id"]
+                target_name = p["first_name"]
+            else:
+                return await message.answer(f"❌ Игрок @{uname} не найден в базе бота.")
+
+    if target_id in ADMIN_IDS:
+        return await message.answer("❌ Главного владельца из .env нельзя снять.")
+    if target_id == message.from_user.id:
+        return await message.answer("❌ Нельзя снять права с самого себя.")
+
+    p = await db.get_player(target_id)
+    if not p or not p.get("is_admin"):
+        return await message.answer("ℹ️ Этот пользователь не является администратором.")
+
+    await db.update_player(target_id, is_admin=0)
+    set_admin_cache(target_id, False)
+    name = target_name or p.get("first_name", str(target_id))
+    try:
+        await message.bot.send_message(target_id, "ℹ️ Твои права администратора в AMG Racing были отозваны.")
+    except Exception:
+        pass
+    await message.answer(
+        f"✅ <b>Права администратора успешно сняты с {name}!</b>\n\n"
+        f"🆔 ID: <code>{target_id}</code>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[Btn(text="👑 К списку админов", callback_data="adm:admins")]])
+    )
+
+
+@router.message(Command("setlevel"))
+async def cmd_setlevel(message: Message):
+    if not is_admin(message.from_user.id):
+        return await message.answer("❌ У вас нет прав администратора.")
+
+    target_id = None
+    target_name = None
+    level_val = None
+
+    parts = message.text.split()
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target_u = message.reply_to_message.from_user
+        target_id = target_u.id
+        target_name = target_u.first_name
+        if len(parts) >= 2 and parts[1].isdigit():
+            level_val = int(parts[1])
+    elif len(parts) >= 3:
+        target_str = parts[1].strip()
+        if target_str.isdigit():
+            target_id = int(target_str)
+        else:
+            p = await db.get_player_by_username(target_str.lstrip("@"))
+            if p:
+                target_id = p["user_id"]
+                target_name = p["first_name"]
+        if parts[2].isdigit():
+            level_val = int(parts[2])
+
+    if not target_id or level_val is None:
+        return await message.answer(
+            "📈 <b>КАК УСТАНОВИТЬ УРОВЕНЬ ИГРОКУ:</b>\n\n"
+            "• <b>Ответом на сообщение:</b> <code>/setlevel 15</code>\n"
+            "• <b>По ID:</b> <code>/setlevel 123456789 25</code>\n"
+            "• <b>По @юзернейму:</b> <code>/setlevel @username 30</code>\n\n"
+            "<i>(Допустимый уровень: от 1 до 100)</i>"
+        )
+
+    if not (1 <= level_val <= 100):
+        return await message.answer("❌ Уровень должен быть в диапазоне от 1 до 100.")
+
+    p = await db.get_player(target_id)
+    if not p:
+        return await message.answer("❌ Игрок не найден в базе данных.")
+
+    await db.update_player(target_id, level=level_val, xp=0)
+    name = target_name or p.get("first_name", str(target_id))
+    try:
+        await message.bot.send_message(target_id, f"🆙 Администратор установил твой уровень на: <b>{level_val}</b>!")
+    except Exception:
+        pass
+    await message.answer(
+        f"✅ <b>Уровень игрока {name} установлен на {level_val}!</b>\n\n"
+        f"🆔 ID: <code>{target_id}</code>\n"
+        f"📈 Уровень: <b>{level_val}</b> (XP сброшен на 0)",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[Btn(text="👤 Карточка игрока", callback_data=f"adm:p:{target_id}")]])
+    )
+
+
+@router.message(Command("addlevel"))
+async def cmd_addlevel(message: Message):
+    if not is_admin(message.from_user.id):
+        return await message.answer("❌ У вас нет прав администратора.")
+
+    target_id = None
+    target_name = None
+    delta_val = None
+
+    parts = message.text.split()
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target_u = message.reply_to_message.from_user
+        target_id = target_u.id
+        target_name = target_u.first_name
+        if len(parts) >= 2 and parts[1].isdigit():
+            delta_val = int(parts[1])
+    elif len(parts) >= 3:
+        target_str = parts[1].strip()
+        if target_str.isdigit():
+            target_id = int(target_str)
+        else:
+            p = await db.get_player_by_username(target_str.lstrip("@"))
+            if p:
+                target_id = p["user_id"]
+                target_name = p["first_name"]
+        if parts[2].isdigit():
+            delta_val = int(parts[2])
+
+    if not target_id or delta_val is None:
+        return await message.answer(
+            "📈 <b>КАК НАЧИСЛИТЬ УРОВНИ ИГРОКУ:</b>\n\n"
+            "• <b>Ответом на сообщение:</b> <code>/addlevel 3</code>\n"
+            "• <b>По ID:</b> <code>/addlevel 123456789 5</code>\n"
+            "• <b>По @юзернейму:</b> <code>/addlevel @username 2</code>"
+        )
+
+    if delta_val <= 0:
+        return await message.answer("❌ Количество уровней должно быть положительным числом.")
+
+    p = await db.get_player(target_id)
+    if not p:
+        return await message.answer("❌ Игрок не найден в базе данных.")
+
+    new_lvl = min(100, p["level"] + delta_val)
+    await db.update_player(target_id, level=new_lvl)
+    name = target_name or p.get("first_name", str(target_id))
+    try:
+        await message.bot.send_message(target_id, f"🎉 Администратор начислил тебе <b>+{delta_val}</b> уровней! Твой текущий уровень: <b>{new_lvl}</b>!")
+    except Exception:
+        pass
+    await message.answer(
+        f"✅ <b>Игроку {name} начислено +{delta_val} уровней!</b>\n\n"
+        f"🆔 ID: <code>{target_id}</code>\n"
+        f"📊 Было: <b>{p['level']}</b> ➔ Стало: <b>{new_lvl}</b>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[Btn(text="👤 Карточка игрока", callback_data=f"adm:p:{target_id}")]])
+    )
+
+
 @router.callback_query(F.data.startswith("adm:"))
 async def adm_router(cb: CallbackQuery, state: FSMContext):
+
     if not is_admin(cb.from_user.id):
         return await cb.answer("Нет доступа", show_alert=True)
     parts = cb.data.split(":")
@@ -212,8 +387,11 @@ async def adm_router(cb: CallbackQuery, state: FSMContext):
         await show_player(cb, uid)
     elif action == "toggle_admin":
         await toggle_admin(cb, int(parts[2]))
+    elif action == "remove_admin":
+        await remove_admin_direct(cb, int(parts[2]))
     elif action == "toggle_ban":
         await toggle_ban(cb, int(parts[2]))
+
     elif action == "db_info":
         await show_db_info(cb)
     elif action == "db_backup":
@@ -338,20 +516,51 @@ async def show_player(cb: CallbackQuery, uid: int):
 
 
 async def show_admins(cb: CallbackQuery):
-    lines = [f"👑 <code>{i}</code> (главный, из .env)" for i in ADMIN_IDS]
-    for uid in await db.get_admin_ids():
+    lines = [f"👑 <code>{i}</code> (главный владелец)" for i in ADMIN_IDS]
+    admin_uids = await db.get_admin_ids()
+    rows = []
+
+    for uid in admin_uids:
         if uid in ADMIN_IDS:
             continue
         p = await db.get_player(uid)
         if p:
-            lines.append(f"👑 <b>{p['first_name']}</b> — <code>{uid}</code>")
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [Btn(text="➕ Ввести ID или переслать", callback_data="adm:add_admin")],
-        [Btn(text="👥 Выбрать из списка игроков", callback_data="adm:pick_admin_user:0")],
-        [Btn(text="◀️ Назад", callback_data="adm:main")]
-    ])
-    await safe_edit(cb, "👑 <b>Администраторы AMG Racing</b>\n\n" + ("\n".join(lines) or "Нет") +
-                    "\n\n<i>Выберите способ добавления админа:</i>", kb)
+            name = p.get("first_name", f"ID {uid}")
+            lines.append(f"👑 <b>{name}</b> (@{p.get('username') or '—'}) — <code>{uid}</code>")
+            rows.append([
+                Btn(text=f"👤 {name}", callback_data=f"adm:p:{uid}"),
+                Btn(text="❌ Снять права", callback_data=f"adm:remove_admin:{uid}")
+            ])
+
+    rows.append([Btn(text="➕ Ввести ID или переслать", callback_data="adm:add_admin")])
+    rows.append([Btn(text="👥 Выбрать из списка игроков", callback_data="adm:pick_admin_user:0")])
+    rows.append([Btn(text="◀️ Назад", callback_data="adm:main")])
+
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+    text = (
+        "👑 <b>Администраторы AMG Racing</b>\n\n"
+        + ("\n".join(lines) or "Нет")
+        + "\n\n<i>Чтобы снять админа — нажми «❌ Снять права» напротив него,\nлибо напиши:</i> <code>/removeadmin [id или @username]</code>"
+    )
+    await safe_edit(cb, text, kb)
+
+
+async def remove_admin_direct(cb: CallbackQuery, uid: int):
+    if uid in ADMIN_IDS:
+        return await cb.answer("❌ Главного владельца нельзя снять!", show_alert=True)
+    if uid == cb.from_user.id:
+        return await cb.answer("❌ Нельзя снять права с самого себя!", show_alert=True)
+    p = await db.get_player(uid)
+    await db.update_player(uid, is_admin=0)
+    set_admin_cache(uid, False)
+    name = p["first_name"] if p else str(uid)
+    await cb.answer(f"✅ Права администратора сняты с {name}!", show_alert=True)
+    try:
+        await cb.bot.send_message(uid, "ℹ️ Твои права администратора в AMG Racing были отозваны.")
+    except Exception:
+        pass
+    await show_admins(cb)
+
 
 
 async def show_pick_admin_user(cb: CallbackQuery, page: int = 0):

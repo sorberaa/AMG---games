@@ -220,6 +220,24 @@ async def successful_payment_handler(message: Message, player: dict):
     rec_text = "\n".join(received_lines)
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
 
+    # Личное уведомление владельцу бота о поступлении звёзд
+    from config import OWNER_ID, SUPER_ADMINS
+    notify_recipients = set([OWNER_ID] + SUPER_ADMINS)
+    for admin_id in notify_recipients:
+        try:
+            await message.bot.send_message(
+                admin_id,
+                f"⭐️ <b>НОВОЕ ПОСТУПЛЕНИЕ ЗВЁЗД (STARS)!</b>\n\n"
+                f"👤 <b>Игрок:</b> {message.from_user.first_name} (@{message.from_user.username or '—'})\n"
+                f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
+                f"📦 <b>Пакет:</b> {pack['title']}\n"
+                f"⭐️ <b>Оплачено:</b> <b>+{stars_amount} ⭐️</b>\n"
+                f"🧾 <b>Транзакция:</b> <code>{charge_id}</code>\n\n"
+                f"💰 <i>Звёзды зачислены на баланс бота!</i>"
+            )
+        except Exception as e:
+            log.warning("Не удалось отправить уведомление о звёздах админу %s: %s", admin_id, e)
+
     from kb import back_kb
     await message.answer(
         f"{gif_tag}⭐️ <b>СПАСИБО ЗА ПОДДЕРЖКУ! ОПЛАТА УСПЕШНО ПРОШЛА!</b>\n\n"
@@ -228,4 +246,5 @@ async def successful_payment_handler(message: Message, player: dict):
         "🏎 <i>Твои новые возможности уже доступны в игре. Газ в пол!</i>",
         reply_markup=back_kb("menu", "🏠 В главное меню")
     )
+
 
