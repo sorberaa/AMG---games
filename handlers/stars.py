@@ -64,6 +64,12 @@ def pack_details_text(pack: dict, player: dict) -> str:
         lines.append(f"• 🛡 <b>{pack['insurance']} страховки AMG</b> от поломок и арестов")
     if pack.get("case_drop"):
         lines.append("• 🧰 <b>Шанс 25% на моментальный спорткар S-класса</b>")
+    if pack.get("extra_spins"):
+        lines.append(f"• 🎰 <b>+{pack['extra_spins']} доп. спина</b> в Колесе Фортуны AMG")
+    if pack.get("is_plate"):
+        lines.append("• 🏷 <b>Установка любого блатного госномера</b> на твой болид")
+    if pack.get("is_chat_boost"):
+        lines.append("• 🔥 <b>Буст банды x2 на 2 часа</b> для всех участников чата")
 
     lines.append("\n💡 <i>Оплата списывается с баланса звёзд твоего Telegram в 1 клик.</i>")
     return "\n".join(lines)
@@ -142,7 +148,13 @@ async def successful_payment_handler(message: Message, player: dict):
         log.warning("Неизвестный payload платежа: %s", payload)
         return
 
-    pack_id = parts[1]
+    if parts[1] == "chat_boost":
+        pack_id = "chat_boost_x2"
+        target_chat_id = int(parts[2])
+    else:
+        pack_id = parts[1]
+        target_chat_id = None
+
     pack = STARS_PACKS.get(pack_id)
     if not pack:
         log.error("Пакет %s не найден при успешной оплате!", pack_id)
@@ -221,6 +233,37 @@ async def successful_payment_handler(message: Message, player: dict):
         else:
             await db.add_xp(user_id, 1000)
             received_lines.append("• 🎁 <b>Приз из кейса:</b> Дополнительно +1 000 XP 📈!")
+
+    # 10. Дополнительные спины Колеса
+    if pack.get("extra_spins"):
+        await db.increment(user_id, extra_spins=pack["extra_spins"])
+        received_lines.append(f"• 🎰 <b>+{pack['extra_spins']} доп. вращений</b> в Колесе Фортуны (крути в /wheel прямо сейчас)!")
+
+    # 11. Блатной госномер
+    if pack.get("is_plate"):
+        await db.increment(user_id, custom_plates=1)
+        received_lines.append("• 🏷 <b>Право на установку блатного госномера</b> (установи в /garage ➡️ авто ➡️ «Блатной номер» или командой <code>/plate НОМЕР</code>)!")
+
+    # 12. Буст банды x2
+    if pack.get("is_chat_boost"):
+        if target_chat_id:
+            until_str = await db.set_chat_boost(target_chat_id, hours=pack.get("boost_hours", 2), sponsor_id=user_id, sponsor_name=message.from_user.first_name)
+            received_lines.append(f"• 🔥 <b>Счастливые часы x2 активированы в чате на 2 часа</b> (до {until_str})!")
+            try:
+                await message.bot.send_message(
+                    target_chat_id,
+                    f"🎉 <b>СЧАСТЛИВЫЕ ЧАСЫ АКТИВИРОВАНЫ! БУСТ НАГРАД x2 НА 2 ЧАСА!</b> 🔥\n\n"
+                    f"👑 <b>Почётный спонсор банды:</b> {message.from_user.first_name} (@{message.from_user.username or '—'})\n\n"
+                    f"⭐️ Наш спонсор оплатил <b>БУСТ x2</b> для ВСЕХ участников чата!\n"
+                    f"💰 Теперь победы в рейдах (/boss), заездах (/drag), турнирах (/tournament), "
+                    f"выживании (/royale) и викторинах (/quiz) приносят <b>В 2 РАЗА БОЛЬШЕ МОНЕТ 🪙 И ОПЫТА!</b>\n\n"
+                    f"<i>Жмите газ в пол!</i> 🏎💨"
+                )
+            except Exception as e:
+                log.warning("Не удалось отправить сообщение об активации буста в чат %s: %s", target_chat_id, e)
+        else:
+            await db.increment(user_id, chat_boosts_owned=1)
+            received_lines.append("• 🔥 <b>Жетон Буста банды x2</b> на 2 часа добавлен в инвентарь! (напиши <code>/boost</code> в любой группе, чтобы активировать)")
 
     rec_text = "\n".join(received_lines)
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"

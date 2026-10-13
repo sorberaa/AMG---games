@@ -66,6 +66,9 @@ CREATE TABLE IF NOT EXISTS players (
     vip_until TEXT DEFAULT NULL,
     nitro_boost_until TEXT DEFAULT NULL,
     stars_spent INTEGER DEFAULT 0,
+    custom_plates INTEGER DEFAULT 0,
+    extra_spins INTEGER DEFAULT 0,
+    chat_boosts_owned INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -89,6 +92,7 @@ CREATE TABLE IF NOT EXISTS player_cars (
     total_races INTEGER DEFAULT 0,
     total_wins INTEGER DEFAULT 0,
     color TEXT DEFAULT NULL,
+    plate TEXT DEFAULT NULL,
     purchased_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS races (
@@ -152,6 +156,13 @@ CREATE TABLE IF NOT EXISTS stars_transactions (
     telegram_charge_id TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS chat_boosts (
+    chat_id INTEGER PRIMARY KEY,
+    boost_until TEXT NOT NULL,
+    sponsor_id INTEGER NOT NULL,
+    sponsor_name TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
 """
 
 
@@ -193,6 +204,9 @@ CREATE TABLE IF NOT EXISTS players (
     vip_until TEXT DEFAULT NULL,
     nitro_boost_until TEXT DEFAULT NULL,
     stars_spent INTEGER DEFAULT 0,
+    custom_plates INTEGER DEFAULT 0,
+    extra_spins INTEGER DEFAULT 0,
+    chat_boosts_owned INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -217,6 +231,7 @@ CREATE TABLE IF NOT EXISTS player_cars (
     total_races INTEGER DEFAULT 0,
     total_wins INTEGER DEFAULT 0,
     color TEXT DEFAULT NULL,
+    plate TEXT DEFAULT NULL,
     purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -288,6 +303,14 @@ CREATE TABLE IF NOT EXISTS stars_transactions (
     telegram_charge_id TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS chat_boosts (
+    chat_id BIGINT PRIMARY KEY,
+    boost_until TEXT NOT NULL,
+    sponsor_id BIGINT NOT NULL,
+    sponsor_name TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 UPGRADE_COLUMNS = {
@@ -299,7 +322,8 @@ PLAYER_COLUMNS = {
     "reputation", "wins", "losses", "races_total", "pvp_wins", "daily_streak", "last_daily",
     "selected_car_id", "energy", "max_energy", "last_energy_update", "is_admin", "is_banned",
     "has_insurance", "last_coin_duel", "chat_nitro_until", "salt_boost_until", "last_salt_boost_date", "gold_wrap", "defeated_opponents",
-    "easy_races_today", "easy_races_date", "last_wheel_spin", "last_adventure", "vip_until", "nitro_boost_until", "stars_spent"
+    "easy_races_today", "easy_races_date", "last_wheel_spin", "last_adventure", "vip_until", "nitro_boost_until", "stars_spent",
+    "custom_plates", "extra_spins", "chat_boosts_owned"
 }
 
 
@@ -434,7 +458,7 @@ async def backup_sqlite_to_json():
         async with aiosqlite.connect(DATABASE_PATH) as s_db:
             s_db.row_factory = aiosqlite.Row
             data = {}
-            for table in ["players", "player_cars", "races", "achievements", "game_cooldowns", "bosses", "withdrawals"]:
+            for table in ["players", "player_cars", "races", "achievements", "game_cooldowns", "bosses", "withdrawals", "chat_boosts"]:
                 try:
                     cur = await s_db.execute(f"SELECT * FROM {table}")
                     rows = [dict(r) for r in await cur.fetchall()]
@@ -471,16 +495,16 @@ async def restore_sqlite_from_json():
                 return
             logger.info(f"Обнаружен резервный бэкап! Восстанавливаем {len(players)} игроков...")
             for p in players:
-                cols = [k for k in p.keys() if p[k] is not None]
+                cols = [col for col, val in p.items() if val is not None]
                 placeholders = ["?"] * len(cols)
-                vals = [p[c] for c in cols]
+                vals = [p[col] for col in cols]
                 q = f"INSERT OR IGNORE INTO players ({', '.join(cols)}) VALUES ({', '.join(placeholders)})"
                 await s_db.execute(q, vals)
-                
-            for c in data.get("player_cars", []):
-                cols = [k for k in c.keys() if c[k] is not None]
+
+            for car in data.get("player_cars", []):
+                cols = [col for col, val in car.items() if val is not None]
                 placeholders = ["?"] * len(cols)
-                vals = [c[k] for c in cols]
+                vals = [car[col] for col in cols]
                 q = f"INSERT OR IGNORE INTO player_cars ({', '.join(cols)}) VALUES ({', '.join(placeholders)})"
                 await s_db.execute(q, vals)
 
@@ -600,11 +624,18 @@ async def init_db() -> None:
                     ("vip_until", "TEXT DEFAULT NULL"),
                     ("nitro_boost_until", "TEXT DEFAULT NULL"),
                     ("stars_spent", "INTEGER DEFAULT 0"),
+                    ("custom_plates", "INTEGER DEFAULT 0"),
+                    ("extra_spins", "INTEGER DEFAULT 0"),
+                    ("chat_boosts_owned", "INTEGER DEFAULT 0"),
                 ]:
                     try:
                         await conn.execute(f"ALTER TABLE players ADD COLUMN IF NOT EXISTS {col} {typ}")
                     except Exception:
                         pass
+                try:
+                    await conn.execute("ALTER TABLE player_cars ADD COLUMN IF NOT EXISTS plate TEXT DEFAULT NULL")
+                except Exception:
+                    pass
                 cnt = await conn.fetchval("SELECT COUNT(*) FROM players")
                 if cnt == 0 and os.path.exists(DATABASE_PATH):
                     await migrate_sqlite_to_pg(DATABASE_PATH)
@@ -636,6 +667,9 @@ async def init_db() -> None:
             ("vip_until", "TEXT DEFAULT NULL"),
             ("nitro_boost_until", "TEXT DEFAULT NULL"),
             ("stars_spent", "INTEGER DEFAULT 0"),
+            ("custom_plates", "INTEGER DEFAULT 0"),
+            ("extra_spins", "INTEGER DEFAULT 0"),
+            ("chat_boosts_owned", "INTEGER DEFAULT 0"),
         ]:
             try:
                 await s_db.execute(f"ALTER TABLE players ADD COLUMN {col} {typ}")
@@ -660,6 +694,11 @@ async def init_db() -> None:
 
         try:
             await s_db.execute("ALTER TABLE player_cars ADD COLUMN color TEXT DEFAULT NULL")
+        except Exception:
+            pass
+
+        try:
+            await s_db.execute("ALTER TABLE player_cars ADD COLUMN plate TEXT DEFAULT NULL")
         except Exception:
             pass
 
@@ -1396,6 +1435,104 @@ async def get_stars_stats() -> dict:
             "today_stars": today_stars,
             "tx_count": all_tx,
         }
+
+
+# ── Госномера и Буст чата ────────────────────────────────────
+
+async def set_car_plate(car_id: int, plate: str | None) -> None:
+    """Устанавливает или снимает госномер с автомобиля."""
+    async with _connect() as db:
+        await db.execute(
+            to_pg_query("UPDATE player_cars SET plate = ? WHERE id = ?"),
+            (plate, car_id)
+        )
+        await db.commit()
+    try:
+        await backup_sqlite_to_json()
+    except Exception:
+        pass
+
+
+async def get_chat_boost(chat_id: int) -> dict | None:
+    """Возвращает информацию об активном x2 бусте чата или None."""
+    async with _connect() as db:
+        if not is_postgres():
+            db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            to_pg_query("SELECT chat_id, boost_until, sponsor_id, sponsor_name, created_at FROM chat_boosts WHERE chat_id = ?"),
+            (chat_id,)
+        )
+        row = await cur.fetchone()
+        if not row:
+            return None
+        if isinstance(row, dict) or hasattr(row, "keys"):
+            d = dict(row)
+        else:
+            d = {
+                "chat_id": row[0],
+                "boost_until": row[1],
+                "sponsor_id": row[2],
+                "sponsor_name": row[3],
+                "created_at": row[4] if len(row) > 4 else None
+            }
+        try:
+            until_dt = datetime.strptime(d["boost_until"], TS_FMT)
+            if until_dt > datetime.utcnow():
+                return d
+        except Exception:
+            pass
+        return None
+
+
+async def set_chat_boost(chat_id: int, hours: int, sponsor_id: int, sponsor_name: str) -> str:
+    """Активирует или продлевает x2 буст наград в чате на указанное количество часов."""
+    now = datetime.utcnow()
+    cur_boost = await get_chat_boost(chat_id)
+    if cur_boost:
+        try:
+            base_dt = datetime.strptime(cur_boost["boost_until"], TS_FMT)
+            until_dt = base_dt + timedelta(hours=hours)
+        except Exception:
+            until_dt = now + timedelta(hours=hours)
+    else:
+        until_dt = now + timedelta(hours=hours)
+
+    until_str = until_dt.strftime(TS_FMT)
+
+    async with _connect() as db:
+        if is_postgres():
+            await db.execute(
+                """
+                INSERT INTO chat_boosts (chat_id, boost_until, sponsor_id, sponsor_name)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (chat_id) DO UPDATE SET
+                    boost_until = $2,
+                    sponsor_id = $3,
+                    sponsor_name = $4
+                """,
+                chat_id, until_str, sponsor_id, sponsor_name
+            )
+        else:
+            await db.execute(
+                """
+                INSERT INTO chat_boosts (chat_id, boost_until, sponsor_id, sponsor_name)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(chat_id) DO UPDATE SET
+                    boost_until = excluded.boost_until,
+                    sponsor_id = excluded.sponsor_id,
+                    sponsor_name = excluded.sponsor_name
+                """,
+                (chat_id, until_str, sponsor_id, sponsor_name)
+            )
+        await db.commit()
+
+    try:
+        await backup_sqlite_to_json()
+    except Exception:
+        pass
+
+    return until_str
+
 
 
 

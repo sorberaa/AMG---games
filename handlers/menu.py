@@ -61,12 +61,15 @@ HELP = (
     "• 🚓 /chase — погоня от полиции всей бандой\n"
     "• 🚦 /drag — драг-рейсинг 402 метра\n"
     "• 👑 /royale — битва на выбывание\n"
-    "• 🎰 /wheel — Колесо Фортуны раз в сутки\n"
-    "• 📦 /airdrop — перехват контейнера с лутом\n\n"
+    "• 🎰 /wheel — Колесо Фортуны раз в сутки (+доп. спины)\n"
+    "• 📦 /airdrop — перехват контейнера с лутом\n"
+    "• 🔥 /boost — запустить Счастливые часы (буст x2 наград чата)\n\n"
     "📱 <b>ЛИЧНЫЙ КАБИНЕТ (в личке с ботом):</b>\n"
     "• /garage — гараж и покраска болидов\n"
+    "• /plate [номер] — установить блатной госномер на авто\n"
     "• /tuning — прокачка узлов (двигатель, нитро, турбина)\n"
     "• /shop — покупка новых авто в автосалоне\n"
+    "• /stars — звёздный магазин Telegram Stars\n"
     "• /cases — открытие сундуков и кейсов AMG\n"
     "• /cshop — магазин бонусов и сундуков\n"
     "• /daily — ежедневный подарок\n"
@@ -76,6 +79,42 @@ HELP = (
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, player: dict):
+    # Обработка диплинков оплаты и бустов
+    text = message.text or ""
+    parts = text.split(maxsplit=1)
+    if len(parts) > 1:
+        param = parts[1].strip()
+        if param.startswith("boost_"):
+            target_chat_id = param.replace("boost_", "")
+            pack = data.STARS_PACKS.get("chat_boost_x2")
+            if pack:
+                from aiogram.types import LabeledPrice
+                prices = [LabeledPrice(label=pack["title"], amount=pack["stars"])]
+                return await message.answer_invoice(
+                    title=pack["title"],
+                    description=f"Активация Буста наград x2 для чата ID: {target_chat_id} на 2 часа!",
+                    payload=f"stars:chat_boost:{target_chat_id}:{message.from_user.id}",
+                    currency="XTR",
+                    prices=prices,
+                    provider_token="",
+                    start_parameter=f"boost_{target_chat_id}"
+                )
+        elif param.startswith("stars_"):
+            pack_id = param.replace("stars_", "")
+            pack = data.STARS_PACKS.get(pack_id)
+            if pack:
+                from aiogram.types import LabeledPrice
+                prices = [LabeledPrice(label=pack["title"], amount=pack["stars"])]
+                return await message.answer_invoice(
+                    title=pack["title"],
+                    description=pack["short_desc"],
+                    payload=f"stars:{pack_id}:{message.from_user.id}",
+                    currency="XTR",
+                    prices=prices,
+                    provider_token="",
+                    start_parameter=f"stars_{pack_id}"
+                )
+
     await message.answer(WELCOME)
     await send_menu(message, message.from_user.id, menu_text(player), main_menu_kb())
 

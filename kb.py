@@ -66,10 +66,38 @@ def car_actions_kb(car_id: int, is_selected: bool) -> InlineKeyboardMarkup:
         rows.append([Btn(text="✅ Сделать основной", callback_data=f"car_select:{car_id}")])
     rows.append([Btn(text="🔧 Тюнинг", callback_data=f"tuning:{car_id}"),
                  Btn(text="🎨 Покраска", callback_data=f"car_paint:{car_id}")])
-    rows.append([Btn(text="💰 Продать", callback_data=f"car_sell:{car_id}")])
+    rows.append([Btn(text="🏷 Блатной номер", callback_data=f"car_plate:{car_id}"),
+                 Btn(text="💰 Продать", callback_data=f"car_sell:{car_id}")])
     rows.append([Btn(text="🚗 В гараж", callback_data="garage:0"),
                  Btn(text="🏠 Главное меню", callback_data="menu")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def car_plate_kb(car_id: int, has_plates: bool, current_plate: str | None = None) -> InlineKeyboardMarkup:
+    presets = [
+        "А 777 АА 77", "Х 001 АМ 99",
+        "В 007 ОР 77", "С 666 СС 77",
+        "АМГ 063", "B O S S",
+    ]
+    b = InlineKeyboardBuilder()
+    for p in presets:
+        is_cur = (current_plate == p)
+        txt = f"🏷 {p} ✅" if is_cur else f"🏷 {p}"
+        b.button(text=txt, callback_data=f"plate_set:{car_id}:{p}")
+    b.adjust(2)
+
+    extra_rows = []
+    if not has_plates:
+        extra_rows.append([Btn(text="⭐️ Купить установку номера (29 ⭐️)", callback_data="stars:buy:plate_custom")])
+    if current_plate:
+        extra_rows.append([Btn(text="🗑 Снять номер", callback_data=f"plate_remove:{car_id}")])
+    extra_rows.append([Btn(text="◀️ К машине", callback_data=f"car:{car_id}"),
+                       Btn(text="🚗 В гараж", callback_data="garage:0")])
+
+    kb = b.as_markup()
+    for row in extra_rows:
+        kb.inline_keyboard.append(row)
+    return kb
 
 
 def paint_shop_kb(car_id: int, current_color_key: str = None) -> InlineKeyboardMarkup:
@@ -214,11 +242,25 @@ def boss_kb() -> InlineKeyboardMarkup:
     ])
 
 
-def wheel_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [Btn(text="🎰 КРУТИТЬ РУЛЕТКУ (1 раз в сутки)", callback_data="wheel:spin")],
-        [Btn(text="🏠 Главное меню", callback_data="menu")],
-    ])
+def wheel_kb(extra_spins: int = 0, is_spinned_today: bool = False, bot_username: str = "") -> InlineKeyboardMarkup:
+    rows = []
+    if not is_spinned_today:
+        rows.append([Btn(text="🎰 КРУТИТЬ РУЛЕТКУ (Бесплатно)", callback_data="wheel:spin")])
+    elif extra_spins > 0:
+        rows.append([Btn(text=f"🎰 КРУТИТЬ ДОП. СПИН (Осталось: {extra_spins})", callback_data="wheel:spin_extra")])
+    else:
+        if bot_username:
+            url_1 = f"https://t.me/{bot_username}?start=stars_wheel_spin_1"
+            url_3 = f"https://t.me/{bot_username}?start=stars_wheel_spin_3"
+            rows.append([Btn(text="🎰 1 спин (9 ⭐️)", url=url_1),
+                         Btn(text="🎰 3 спина (19 ⭐️) 🔥", url=url_3)])
+        else:
+            rows.append([Btn(text="🎰 1 спин (9 ⭐️)", callback_data="stars:buy:wheel_spin_1"),
+                         Btn(text="🎰 3 спина (19 ⭐️) 🔥", callback_data="stars:buy:wheel_spin_3")])
+
+    rows.append([Btn(text="⭐ Магазин Звёзд", callback_data="stars_shop"),
+                 Btn(text="🏠 Главное меню", callback_data="menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def adventure_choice_kb(scenario_idx: int, choices: list) -> InlineKeyboardMarkup:

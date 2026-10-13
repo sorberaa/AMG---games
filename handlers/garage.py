@@ -5,7 +5,7 @@ from aiogram.types import CallbackQuery, Message
 import db
 from data import CAR_CATALOG, CAR_CLASS_EMOJIS, CAR_COLORS, UPGRADE_BONUSES, UPGRADE_DEFS, fmt, get_sell_price, get_upgrade_cost
 from engine import calc_stats, car_upgrades
-from kb import back_kb, car_actions_kb, garage_kb, paint_shop_kb, sell_confirm_kb, tuning_kb, upgrade_confirm_kb
+from kb import back_kb, car_actions_kb, car_plate_kb, garage_kb, paint_shop_kb, sell_confirm_kb, tuning_kb, upgrade_confirm_kb
 from utils import award_achievements, safe_edit, send_menu
 
 router = Router(name="garage")
@@ -62,10 +62,13 @@ async def car_detail_text(pc: dict) -> str:
     c_key = pc.get("color")
     c_info = CAR_COLORS.get(c_key) if c_key else None
     c_str = f"{c_info['emoji']} {c_info['name']}" if c_info else "Заводской (серебристый 🔘)"
+    plate = pc.get("plate")
+    plate_str = f"<code>[{plate}]</code>" if plate else "<i>не установлен</i>"
     return (
         f"{car['emoji']} <b>{car['name']}</b>\n"
         f"{CAR_CLASS_EMOJIS[car['cls']]} Класс {car['cls']}\n<i>{car['desc']}</i>\n\n"
-        f"🎨 Цвет кузова: <b>{c_str}</b>\n\n"
+        f"🎨 Цвет кузова: <b>{c_str}</b>\n"
+        f"🏷 Госномер: <b>{plate_str}</b>\n\n"
         f"{stats_block(st)}\n\n🔧 Тюнинг: {ups}\n"
         f"🏁 Гонок: {pc['total_races']} · 🏆 Побед: {pc['total_wins']}"
     )
@@ -278,4 +281,141 @@ async def cb_upgrade_yes(cb: CallbackQuery):
     if ach:
         await cb.message.answer(ach.strip())
     await tuning_view(cb, await db.get_car(pc["id"]))
+
+
+# ── Блатные госномера ────────────────────────────────────────
+
+@router.callback_query(F.data.startswith("car_plate:"))
+async def cb_car_plate(cb: CallbackQuery):
+    pc = await own_car(cb, int(cb.data.split(":")[1]))
+    if not pc:
+        return
+    await cb.answer()
+    p = await db.get_player(cb.from_user.id)
+    car = CAR_CATALOG[pc["car_key"]]
+    plate = pc.get("plate")
+    plate_str = f"<code>[{plate}]</code>" if plate else "<i>не установлен</i>"
+    has_plates = bool(p.get("custom_plates", 0) > 0 or p.get("is_admin"))
+
+    if has_plates:
+        status_info = (
+            f"✅ <b>Доступно установок номеров: {p.get('custom_plates', 0)}</b>\n\n"
+            "Выбери готовый блатной номер кнопкой ниже или установи свой собственный текст командой:\n"
+            "👉 <code>/plate ТВОЙ_НОМЕР</code>"
+        )
+    else:
+        status_info = (
+            "⭐️ <b>Стоимость установки: 29 ⭐️ (Telegram Stars)</b>\n"
+            "<i>(Включает право на любой номер + 40 золотых монет 🪙 в подарок!)</i>\n\n"
+            "Выбери готовый номер из списка или нажми «Купить установку номера», чтобы задать абсолютно любой свой текст!"
+        )
+
+    text = (
+        f"🏷 <b>БЛАТНЫЕ ГОСНОМЕРА НА БОЛИД</b> 🏷\n\n"
+        f"🚗 Автомобиль: <b>{car['name']}</b>\n"
+        f"Текущий номер: <b>{plate_str}</b>\n\n"
+        "Блатной номер выделяет твой болид на сходках, отображается в заездах, дуэлях и турнирах чата!\n\n"
+        f"{status_info}"
+    )
+    await safe_edit(cb, text, car_plate_kb(pc["id"], has_plates, plate))
+
+
+@router.callback_query(F.data.startswith("plate_set:"))
+async def cb_plate_set(cb: CallbackQuery):
+    parts = cb.data.split(":")
+    car_id = int(parts[1])
+    plate_val = parts[2]
+    pc = await own_car(cb, car_id)
+    if not pc:
+        return
+
+    p = await db.get_player(cb.from_user.id)
+    has_plates = bool(p.get("custom_plates", 0) > 0 or p.get("is_admin"))
+
+    if not has_plates:
+        await cb.answer()
+        from kb import stars_pack_kb
+        return await safe_edit(
+            cb,
+            f"⭐️ <b>Для установки номера требуется пакет «Блатной госномер»!</b>\n\n"
+            f"Выбранный номер: <code>[{plate_val}]</code>\n"
+            "⭐️ Стоимость: <b>29 ⭐️</b>\n"
+            "🎁 Бонус в комплекте: <b>+40 монет 🪙</b> на игровой баланс!\n\n"
+            "Приобрети пакет ниже в 1 клик через Telegram Stars:",
+            stars_pack_kb("plate_custom", 29)
+        )
+
+    if not p.get("is_admin"):
+        await db.increment(cb.from_user.id, custom_plates=-1)
+
+    await db.set_car_plate(car_id, plate_val)
+    await cb.answer(f"✅ Номер [{plate_val}] установлен!", show_alert=True)
+    pc = await db.get_car(car_id)
+    p = await db.get_player(cb.from_user.id)
+    await safe_edit(cb, await car_detail_text(pc), car_actions_kb(pc["id"], p["selected_car_id"] == pc["id"]))
+
+
+@router.callback_query(F.data.startswith("plate_remove:"))
+async def cb_plate_remove(cb: CallbackQuery):
+    car_id = int(cb.data.split(":")[1])
+    pc = await own_car(cb, car_id)
+    if not pc:
+        return
+    await db.set_car_plate(car_id, None)
+    await cb.answer("🗑 Номер снят!", show_alert=True)
+    pc = await db.get_car(car_id)
+    p = await db.get_player(cb.from_user.id)
+    await safe_edit(cb, await car_detail_text(pc), car_actions_kb(pc["id"], p["selected_car_id"] == pc["id"]))
+
+
+@router.message(Command("plate"))
+async def cmd_plate(message: Message):
+    uid = message.from_user.id
+    p = await db.get_player(uid)
+    if not p:
+        return await message.answer("Сначала напиши /start!")
+
+    sel_id = p.get("selected_car_id")
+    if not sel_id:
+        return await message.answer("У тебя не выбрана основная машина в гараже! Выбери её в /garage.")
+
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        return await message.answer(
+            "🏷 <b>Установка блатного госномера на выбранный болид:</b>\n\n"
+            "Используй формат:\n"
+            "<code>/plate А 777 АА 77</code>\n"
+            "или <code>/plate BOSS 01</code>\n\n"
+            "<i>Длина: от 2 до 12 символов. Номер будет красоваться в гонках и чатах!</i>"
+        )
+
+    new_plate = args[1].strip().upper()
+    if len(new_plate) < 2 or len(new_plate) > 12:
+        return await message.answer("⚠️ Длина номера должна быть от 2 до 12 символов!")
+
+    if not p.get("is_admin") and p.get("custom_plates", 0) <= 0:
+        from kb import stars_pack_kb
+        return await message.answer(
+            f"⭐️ <b>Для установки номера требуется пакет «Блатной госномер» (29 ⭐️)!</b>\n\n"
+            f"Ты получишь:\n"
+            f"• Установку любого своего номера: <code>[{new_plate}]</code>\n"
+            f"• +40 золотых монет 🪙 в подарок!\n\n"
+            f"Приобрети пакет в Звёздном Магазине:",
+            reply_markup=stars_pack_kb("plate_custom", 29)
+        )
+
+    if not p.get("is_admin"):
+        await db.increment(uid, custom_plates=-1)
+
+    await db.set_car_plate(sel_id, new_plate)
+    car_obj = await db.get_car(sel_id)
+    car_name = CAR_CATALOG[car_obj["car_key"]]["name"] if car_obj else "болид"
+
+    await message.answer(
+        f"🏷 <b>БЛАТНОЙ ГОСНОМЕР УСПЕШНО УСТАНОВЛЕН!</b>\n\n"
+        f"🚗 Автомобиль: <b>{car_name}</b>\n"
+        f"Новый номер: <code>[{new_plate}]</code> ✨\n\n"
+        f"<i>Номер зафиксирован во всех протоколах гонок и чатах!</i>"
+    )
+
 

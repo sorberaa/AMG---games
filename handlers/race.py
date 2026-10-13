@@ -153,6 +153,8 @@ async def cb_solo_race_start(cb: CallbackQuery):
     p = await db.get_player(uid)
     my_car = CAR_CATALOG[pc["car_key"]]
     me = cb.from_user.first_name or "Ты"
+    if pc.get("plate"):
+        me = f"{me} [{pc['plate']}]"
 
     # Подбираем сбалансированного соперника из списка
     opp = random.choice(STREET_OPPONENTS)
@@ -556,6 +558,10 @@ async def cb_pvp_accept(cb: CallbackQuery):
         pc1 = await db.get_selected_car(p1["user_id"]) or (await db.get_player_cars(p1["user_id"]))[0]
     c1, c2 = CAR_CATALOG[pc1["car_key"]], CAR_CATALOG[pc2["car_key"]]
     n1, n2 = p1["first_name"], cb.from_user.first_name or "Соперник"
+    if pc1.get("plate"):
+        n1 = f"{n1} [{pc1['plate']}]"
+    if pc2.get("plate"):
+        n2 = f"{n2} [{pc2['plate']}]"
 
     # Страховки и иммунитет для слабых машин в тире
     p1_ins = bool(p1.get("has_insurance"))
@@ -583,11 +589,20 @@ async def cb_pvp_accept(cb: CallbackQuery):
     loser_id = uid if winner_id == p1["user_id"] else p1["user_id"]
     await db.finish_race(race["id"], winner_id)
 
+    boost_note = ""
+    if race.get("chat_id"):
+        boost = await db.get_chat_boost(race["chat_id"])
+        if boost:
+            b_coins = 10
+            await db.grant_coins(winner_id, b_coins, reason="Бонус буста чата x2 в дуэли")
+            await db.add_xp(winner_id, 200)
+            boost_note = f"\n🔥 <i>(Применён Буст чата x2: +{b_coins} 🪙 и +200 XP от спонсора {boost['sponsor_name']}!)</i>"
+
     if bet:
         await db.add_coins(winner_id, bet * 2, reason="Выигрыш в дуэли")
-        bank = f"\n🪙 Банк: <b>{fmt(bet * 2)} монет</b> → {n1 if winner_id == p1['user_id'] else n2}"
+        bank = f"\n🪙 Банк: <b>{fmt(bet * 2)} монет</b> → {n1 if winner_id == p1['user_id'] else n2}{boost_note}"
     else:
-        bank = ""
+        bank = boost_note
 
     s1 = calc_stats(c1, car_upgrades(pc1))
     s2 = calc_stats(c2, car_upgrades(pc2))

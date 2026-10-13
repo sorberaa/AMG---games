@@ -1,8 +1,9 @@
+from datetime import datetime
 import random
 import time
 from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton as Btn
 
 import db
 import data
@@ -150,6 +151,10 @@ async def execute_boss_strike(cb: CallbackQuery, is_nitro: bool = False):
             lines.append(f"{m} <b>{d['first_name']}</b> — <b>{fmt(d['damage'])}</b> HP")
 
         # Щедрые награды по местам (сбалансировано)
+        boost = await db.get_chat_boost(chat_id)
+        boost_mult = 2 if boost else 1
+        boost_note = f"\n\n🔥 <b>Применён Буст чата x2! Награды удвоены спонсором {boost['sponsor_name']}!</b>" if boost else ""
+
         for i, d in enumerate(damagers):
             target_uid = d["user_id"]
             if i == 0:
@@ -165,15 +170,15 @@ async def execute_boss_strike(cb: CallbackQuery, is_nitro: bool = False):
                 coins = 6
                 xp = 150
 
-            await db.grant_coins(target_uid, coins, reason=f"Победа над боссом {boss['boss_name']}")
-            await db.add_xp(target_uid, xp)
+            await db.grant_coins(target_uid, coins * boost_mult, reason=f"Победа над боссом {boss['boss_name']}")
+            await db.add_xp(target_uid, xp * boost_mult)
 
         gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
         await db.delete_boss(chat_id)
         await db.set_cooldown(f"boss:{chat_id}", time.time())
         await cb.message.answer(
             f"{gif_tag}🏆 <b>БОСС «{boss['boss_name']}» ПОЛНОСТЬЮ УНИЧТОЖЕН!</b>\n\n"
-            f"🎉 Чат одержал сокрушительную победу! Все участники битвы получили щедрые награды (монеты 🪙 и опыт XP).\n\n"
+            f"🎉 Чат одержал сокрушительную победу! Все участники битвы получили награды (монеты 🪙 и опыт XP).{boost_note}\n\n"
             f"👑 <b>ГЕРОИ БИТВЫ (ТОП ПО УРОНУ):</b>\n" + "\n".join(lines)
         )
     else:
@@ -449,6 +454,10 @@ async def cb_tourn_start(cb: CallbackQuery):
 
     final_scores.sort(key=lambda x: x[0], reverse=True)
 
+    boost = await db.get_chat_boost(chat_id)
+    boost_mult = 2 if boost else 1
+    boost_note = f"\n🔥 <b>Применён Буст чата x2! Награды удвоены спонсором {boost['sponsor_name']}!</b>\n" if boost else ""
+
     # Выдаем щедрые награды
     medals = ["🥇", "🥈", "🥉"]
     res_lines = []
@@ -456,21 +465,21 @@ async def cb_tourn_start(cb: CallbackQuery):
         m = medals[i] if i < 3 else f"{i + 1}."
         col = participant_colors.get(uid, "🏎")
         if i == 0:
-            c_g = await db.grant_coins(uid, 20, reason="1 место в Гран-при чата")
-            await db.add_xp(uid, 350)
-            reward_txt = f" (+{c_g} 🪙, +350 XP)"
+            c_g = await db.grant_coins(uid, 20 * boost_mult, reason="1 место в Гран-при чата")
+            await db.add_xp(uid, 350 * boost_mult)
+            reward_txt = f" (+{c_g} 🪙, +{350 * boost_mult} XP)"
         elif i == 1:
-            c_g = await db.grant_coins(uid, 12, reason="2 место в Гран-при чата")
-            await db.add_xp(uid, 200)
-            reward_txt = f" (+{c_g} 🪙, +200 XP)"
+            c_g = await db.grant_coins(uid, 12 * boost_mult, reason="2 место в Гран-при чата")
+            await db.add_xp(uid, 200 * boost_mult)
+            reward_txt = f" (+{c_g} 🪙, +{200 * boost_mult} XP)"
         elif i == 2:
-            c_g = await db.grant_coins(uid, 7, reason="3 место в Гран-при чата")
-            await db.add_xp(uid, 100)
-            reward_txt = f" (+{c_g} 🪙, +100 XP)"
+            c_g = await db.grant_coins(uid, 7 * boost_mult, reason="3 место в Гран-при чата")
+            await db.add_xp(uid, 100 * boost_mult)
+            reward_txt = f" (+{c_g} 🪙, +{100 * boost_mult} XP)"
         else:
-            c_g = await db.grant_coins(uid, 3, reason="Участие в Гран-при")
-            await db.add_xp(uid, 40)
-            reward_txt = f" (+{c_g} 🪙, +40 XP)"
+            c_g = await db.grant_coins(uid, 3 * boost_mult, reason="Участие в Гран-при")
+            await db.add_xp(uid, 40 * boost_mult)
+            reward_txt = f" (+{c_g} 🪙, +{40 * boost_mult} XP)"
 
         res_lines.append(f"{m} {col} <b>{name}</b> ({car_name}){reward_txt}")
 
@@ -481,7 +490,7 @@ async def cb_tourn_start(cb: CallbackQuery):
     try:
         await status_msg.edit_text(
             f"{gif_tag}🏁 <b>ФИНИШ ГРАН-ПРИ ЧАТА!</b>\n\n"
-            f"🏆 Абсолютный чемпион: {win_col} <b>{winner_name}</b>!\n\n"
+            f"🏆 Абсолютный чемпион: {win_col} <b>{winner_name}</b>!\n\n{boost_note}"
             f"📋 <b>Итоговый протокол заезда:</b>\n" + "\n".join(res_lines) +
             "\n\n<i>Запустить следующий заезд: /grouprace или /tournament</i>"
         )
@@ -600,14 +609,18 @@ async def cb_chase_act(cb: CallbackQuery):
         # Успешный побег (БЕЗ ТАЙМАУТОВ!)
         gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
         crew_count = len(ch["crew"])
+        boost = await db.get_chat_boost(chat_id)
+        boost_mult = 2 if boost else 1
+        boost_note = f"\n🔥 <b>Применён Буст чата x2! Награды удвоены спонсором {boost['sponsor_name']}!</b>" if boost else ""
+
         for u in ch["crew"]:
-            await db.grant_coins(u, 12, reason="Успешный уход от погони")
-            await db.add_xp(u, 150)
+            await db.grant_coins(u, 12 * boost_mult, reason="Успешный уход от погони")
+            await db.add_xp(u, 150 * boost_mult)
         CHASES.pop(chat_id, None)
         await cb.message.edit_text(
             f"{gif_tag}🏆 <b>БАНДА УШЛА В ОТРЫВ!</b>\n\n"
             f"Полиция потеряла след в ночном городе! Все участники ({crew_count} чел.) "
-            "получили награды (монеты 🪙 и опыт XP)!\n\n"
+            f"получили награды (монеты 🪙 и опыт XP)!{boost_note}\n\n"
             "⚡ <i>Тайм-аутов нет — начинайте новую погоню кнопкой ниже или /chase!</i>",
             reply_markup=restart_kb
         )
@@ -763,15 +776,19 @@ async def cb_quiz_answer(cb: CallbackQuery):
 
     if ans_idx == qz["correct"]:
         qz["active"] = False
-        earned = await db.grant_coins(uid, 20, reason="Победа в чат-викторине")
-        await db.add_xp(uid, 150)
+        boost = await db.get_chat_boost(chat_id)
+        boost_mult = 2 if boost else 1
+        boost_note = f"\n🔥 <i>(Применён Буст чата x2 от спонсора {boost['sponsor_name']}!)</i>" if boost else ""
+
+        earned = await db.grant_coins(uid, 20 * boost_mult, reason="Победа в чат-викторине")
+        await db.add_xp(uid, 150 * boost_mult)
         await cb.answer("🎉 ПРАВИЛЬНО! Ты выиграл!", show_alert=True)
         fact_text = qz["q"]["fact"]
         await cb.message.edit_text(
             f"🏆 <b>ПОБЕДИТЕЛЬ ВИКТОРИНЫ: {uname}!</b>\n\n"
             f"✅ <b>Верный ответ:</b> {qz['q']['opts'][qz['q']['correct']]}\n\n"
             f"💡 <i>{fact_text}</i>\n\n"
-            f"💰 Награда <b>+{earned} 🪙 монет</b> и <b>+150 XP</b> начислена {uname}!\n\n"
+            f"💰 Награда <b>+{earned} 🪙 монет</b> и <b>+{150 * boost_mult} XP</b> начислена {uname}!{boost_note}\n\n"
             "⏳ <i>Следующая авто-викторина будет доступна через <b>3 часа</b>.</i>"
         )
         ACTIVE_QUIZZES.pop(chat_id, None)
@@ -876,6 +893,10 @@ async def cb_drop_open(cb: CallbackQuery):
 
     medals = ["🥇", "🥈", "🥉"]
     res_lines = []
+    boost = await db.get_chat_boost(chat_id)
+    boost_mult = 2 if boost else 1
+    boost_note = f"\n🔥 <b>Применён Буст чата x2! Награды удвоены спонсором {boost['sponsor_name']}!</b>\n" if boost else ""
+
     for i, uid in enumerate(plist):
         name = dr["names"][uid]
         m = medals[i] if i < 3 else "📦"
@@ -888,13 +909,13 @@ async def cb_drop_open(cb: CallbackQuery):
         else:
             coins, xp = 3, 80
 
-        c_g = await db.grant_coins(uid, coins, reason="Аирдроп контейнера в чате")
-        await db.add_xp(uid, xp)
-        res_lines.append(f"{m} <b>{name}</b> — <b>+{c_g} 🪙</b>, +{xp} XP")
+        c_g = await db.grant_coins(uid, coins * boost_mult, reason="Аирдроп контейнера в чате")
+        await db.add_xp(uid, xp * boost_mult)
+        res_lines.append(f"{m} <b>{name}</b> — <b>+{c_g} 🪙</b>, +{xp * boost_mult} XP")
 
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
     await cb.message.edit_text(
-        f"{gif_tag}🎉 <b>КОНТЕЙНЕР AMG PERFORMANCE ВСКРЫТ!</b>\n\n"
+        f"{gif_tag}🎉 <b>КОНТЕЙНЕР AMG PERFORMANCE ВСКРЫТ!</b>\n\n{boost_note}"
         "Лут поделён между участниками рейда:\n\n"
         + "\n".join(res_lines) +
         "\n\n<i>Запустить новый дроп: /airdrop</i>"
@@ -1030,11 +1051,17 @@ async def cb_royale_start(cb: CallbackQuery):
 
     winner_id = alive[0]
     winner_name = ry["names"][winner_id]
-    winner_car = CAR_CATALOG[ry["cars"][winner_id]["car_key"]]["name"]
+    w_pc = ry["cars"][winner_id]
+    winner_car = CAR_CATALOG[w_pc["car_key"]]["name"]
+    w_plate = f" <code>[{w_pc['plate']}]</code>" if w_pc.get("plate") else ""
 
     # Награда победителю
-    earned = await db.grant_coins(winner_id, 25, reason="1 место в Royal Выбывании")
-    await db.add_xp(winner_id, 500)
+    boost = await db.get_chat_boost(chat_id)
+    boost_mult = 2 if boost else 1
+    boost_note = f"\n🔥 <i>(Применён Буст чата x2 от спонсора {boost['sponsor_name']}!)</i>" if boost else ""
+
+    earned = await db.grant_coins(winner_id, 25 * boost_mult, reason="1 место в Royal Выбывании")
+    await db.add_xp(winner_id, 500 * boost_mult)
 
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
     log_text = "\n".join(rounds_log)
@@ -1042,8 +1069,8 @@ async def cb_royale_start(cb: CallbackQuery):
         f"{gif_tag}👑 <b>ФИНИШ БИТВЫ НА ВЫБЫВАНИЕ!</b>\n\n"
         f"<b>Хроника заезда:</b>\n{log_text}\n\n"
         f"🏆 <b>ЕДИНСТВЕННЫЙ ВЫЖИВШИЙ ЧЕМПИОН:</b>\n"
-        f"🥇 <b>{winner_name}</b> на <b>{winner_car}</b>!\n\n"
-        f"💰 Награда победителя: <b>+{earned} 🪙 монет</b> и <b>+500 XP</b>!\n"
+        f"🥇 <b>{winner_name}</b> на <b>{winner_car}</b>{w_plate}!\n\n"
+        f"💰 Награда победителя: <b>+{earned} 🪙 монет</b> и <b>+{500 * boost_mult} XP</b>!{boost_note}\n"
         "Сыграть ещё: <code>/royale</code>"
     )
     ROYALES.pop(chat_id, None)
@@ -1057,38 +1084,56 @@ async def cb_royale_start(cb: CallbackQuery):
 async def cmd_wheel(message: Message):
     gif_tag = f"<a href='{data.AMG_GIFS['wheel']}'>&#8205;</a>"
     from kb import wheel_kb
+    uid = message.from_user.id
+    p = await db.get_player(uid)
+    today = db.now_str()[:10]
+    extra = p.get("extra_spins", 0) if p else 0
+    is_spinned = bool(p and p.get("last_wheel_spin") == today)
+    bot_info = await message.bot.get_me()
+
+    if is_spinned and extra == 0:
+        spin_note = (
+            "⏳ <b>Бесплатный спин на сегодня уже использован!</b>\n"
+            "Не хочешь ждать 24 часа? Возьми доп. вращения за Telegram Stars ⭐️ без очереди:"
+        )
+    elif is_spinned and extra > 0:
+        spin_note = (
+            f"🎰 <b>Бесплатный спин использован, но у тебя есть {extra} доп. спин(ов)!</b>\n"
+            "Жми кнопку ниже, чтобы крутить рулетку прямо сейчас:"
+        )
+    else:
+        spin_note = "Каждый гонщик может крутить рулетку <b>1 раз в сутки бесплатно</b>!"
+
     await message.answer(
         f"{gif_tag}🎰 <b>КОЛЕСО ФОРТУНЫ MERCEDES-AMG</b> 🎰\n\n"
         "Испытай удачу на сходке стритрейсеров!\n"
-        "Каждый гонщик может крутить рулетку <b>1 раз в сутки бесплатно</b>.\n\n"
+        f"{spin_note}\n\n"
         "🎁 <b>Возможные призы:</b>\n"
         "• До <b>150 🪙 золотых монет</b>\n"
         "• Дополнительная ⚡ энергия и 📈 опыт\n"
         "• <i>(Осторожно: есть шанс нарваться на штраф от ДПС!)</i>\n\n"
-        "Жми кнопку ниже, чтобы запустить вращение! 👇",
-        reply_markup=wheel_kb()
+        "Выбирай действие ниже! 👇",
+        reply_markup=wheel_kb(extra, is_spinned, bot_info.username if message.chat.type != "private" else "")
     )
 
 
-@router.callback_query(F.data == "wheel:spin")
-async def cb_wheel_spin(cb: CallbackQuery):
+async def execute_wheel_spin(cb: CallbackQuery, is_extra: bool = False):
     uid = cb.from_user.id
     today = db.now_str()[:10]
     p = await db.get_player(uid)
     if not p:
         return await cb.answer("Сначала напиши /start!", show_alert=True)
 
-    if p.get("last_wheel_spin") == today:
-        return await cb.answer("⏳ Ты уже крутил колесо сегодня! Возвращайся завтра.", show_alert=True)
+    if is_extra:
+        if p.get("extra_spins", 0) <= 0:
+            return await cb.answer("У тебя нет дополнительных спинов!", show_alert=True)
+        await db.increment(uid, extra_spins=-1)
+    else:
+        await db.update_player(uid, last_wheel_spin=today)
 
-    # Крутим колесо
     weights = [item["weight"] for item in data.WHEEL_PRIZES]
     prize = random.choices(data.WHEEL_PRIZES, weights=weights, k=1)[0]
 
-    # Фиксируем дату крутки
-    await db.update_player(uid, last_wheel_spin=today)
-
-    # Выдаем награду
     ptype = prize["type"]
     pval = prize["val"]
     if ptype == "coins":
@@ -1103,16 +1148,61 @@ async def cb_wheel_spin(cb: CallbackQuery):
     elif ptype == "fine":
         await db.spend_coins(uid, pval)
 
+    p_upd = await db.get_player(uid)
+    rem_extra = p_upd.get("extra_spins", 0)
+    bot_info = await cb.bot.get_me()
+    is_grp = cb.message.chat.type != "private"
+    from kb import wheel_kb
+
     gif_tag = f"<a href='{data.AMG_GIFS['wheel']}'>&#8205;</a>"
+    extra_txt = f"\n\n🎰 <i>Осталось бонусных спинов: <b>{rem_extra}</b></i>" if rem_extra > 0 else ""
+
     await cb.message.edit_text(
         f"{gif_tag}🎰 <b>РУЛЕТКА ОСТАНОВИЛАСЬ!</b>\n\n"
         f"Гонщик: <b>{cb.from_user.first_name}</b>\n\n"
         f"🎉 <b>ТВОЙ ВЫИГРЫШ:</b>\n"
         f"👉 <b>{prize['text']}</b>\n\n"
-        f"Приз уже зачислен на твой аккаунт! Следующая бесплатная попытка доступна завтра.",
-        reply_markup=None
+        f"Приз уже зачислен на твой аккаунт!{extra_txt}",
+        reply_markup=wheel_kb(rem_extra, True, bot_info.username if is_grp else "")
     )
     await cb.answer("🎉 Поздравляем с выигрышем!")
+
+
+@router.callback_query(F.data == "wheel:spin")
+async def cb_wheel_spin(cb: CallbackQuery):
+    uid = cb.from_user.id
+    today = db.now_str()[:10]
+    p = await db.get_player(uid)
+    if not p:
+        return await cb.answer("Сначала напиши /start!", show_alert=True)
+
+    if p.get("last_wheel_spin") == today:
+        extra = p.get("extra_spins", 0)
+        bot_info = await cb.bot.get_me()
+        is_grp = cb.message.chat.type != "private"
+        from kb import wheel_kb
+        if extra > 0:
+            await cb.answer("Крутим дополнительный спин!")
+            return await execute_wheel_spin(cb, is_extra=True)
+        else:
+            await cb.answer("⏳ Бесплатный спин уже использован!", show_alert=True)
+            gif_tag = f"<a href='{data.AMG_GIFS['wheel']}'>&#8205;</a>"
+            return await cb.message.edit_text(
+                f"{gif_tag}⏳ <b>БЕСПЛАТНЫЙ СПИН НА СЕГОДНЯ УЖЕ ИСПОЛЬЗОВАН!</b>\n\n"
+                f"Гонщик: <b>{cb.from_user.first_name}</b>\n\n"
+                "Не хочешь ждать 24 часа? Забирай дополнительные спины в 1 клик через Telegram Stars ⭐️:\n\n"
+                "• <b>1 спин</b> — <b>9 ⭐️</b> (+15 монет 🪙)\n"
+                "• <b>3 спина</b> — <b>19 ⭐️</b> (+35 монет 🪙) [Выгода х3 🔥]\n\n"
+                "Выбивай монеты, энергию и опыт прямо сейчас! 👇",
+                reply_markup=wheel_kb(0, True, bot_info.username if is_grp else "")
+            )
+
+    await execute_wheel_spin(cb, is_extra=False)
+
+
+@router.callback_query(F.data == "wheel:spin_extra")
+async def cb_wheel_spin_extra(cb: CallbackQuery):
+    await execute_wheel_spin(cb, is_extra=True)
 
 
 # ── Ночные Похождения по Автобану (/adventure, /trip) ──────────
@@ -1338,18 +1428,99 @@ async def cb_drag_launch(cb: CallbackQuery):
     loser_name = drag["opponent_name"] if uid == drag["challenger_id"] else drag["challenger_name"]
 
     # Награда
-    c_drag = await db.grant_coins(uid, 15, reason="Победа в Драг-рейсинге 402м")
-    await db.add_xp(uid, 200)
+    boost = await db.get_chat_boost(chat_id)
+    boost_mult = 2 if boost else 1
+    boost_note = f"\n🔥 <i>(Применён Буст чата x2 от спонсора {boost['sponsor_name']}!)</i>" if boost else ""
+
+    c_drag = await db.grant_coins(uid, 15 * boost_mult, reason="Победа в Драг-рейсинге 402м")
+    await db.add_xp(uid, 200 * boost_mult)
 
     gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
     await cb.message.edit_text(
         f"{gif_tag}🏁 <b>ФИНИШ 402 МЕТРА! ПОБЕДА!</b>\n\n"
         f"🥇 <b>{winner_name}</b> показал молниеносную реакцию: <b>{reaction} сек</b>!\n"
         f"🥈 <i>{loser_name}</i> отстал на пол-корпуса.\n\n"
-        f"💰 Награда победителю: <b>+{c_drag} 🪙 монет</b> и <b>+200 XP</b>!\n\n"
+        f"💰 Награда победителю: <b>+{c_drag} 🪙 монет</b> и <b>+{200 * boost_mult} XP</b>!{boost_note}\n\n"
         "Сыграть ещё: <code>/drag</code>"
     )
     DRAG_RACES.pop(chat_id, None)
     await db.set_cooldown(f"drag:{chat_id}", time.time())
+
+
+# ── Буст для всей банды / Счастливые часы (/boost) ──────────
+
+@router.message(Command("boost"))
+async def cmd_boost(message: Message):
+    chat_id = message.chat.id
+    if message.chat.type == "private":
+        return await message.answer(
+            "🔥 <b>БУСТ ДЛЯ ВСЕЙ БАНДЫ (x2 НАГРАДЫ)</b>\n\n"
+            "Эту команду нужно вводить в групповом чате вашей банды!\n"
+            "Добавь бота в группу или напиши <code>/boost</code> там, чтобы запустить Счастливые Часы с удвоенными монетами 🪙 и опытом 📈 для всех участников."
+        )
+
+    boost = await db.get_chat_boost(chat_id)
+    bot_info = await message.bot.get_me()
+    url = f"https://t.me/{bot_info.username}?start=boost_{chat_id}"
+
+    if boost:
+        until_dt = datetime.strptime(boost["boost_until"], db.TS_FMT)
+        rem_min = max(1, int((until_dt - datetime.utcnow()).total_seconds() // 60))
+        rem_str = f"{rem_min // 60} ч. {rem_min % 60} мин." if rem_min >= 60 else f"{rem_min} мин."
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [Btn(text="🔥 Продлить буст чата x2 (29 ⭐️)", url=url)]
+        ])
+        await message.answer(
+            f"🔥 <b>СЧАСТЛИВЫЕ ЧАСЫ В ЧАТЕ УЖЕ АКТИВНЫ!</b> 🔥\n\n"
+            f"👑 <b>Почётный спонсор банды:</b> {boost['sponsor_name']}\n"
+            f"⏳ <b>Осталось времени:</b> <b>{rem_str}</b>\n\n"
+            f"🎁 <b>Эффект:</b> В 2 РАЗА БОЛЬШЕ монет 🪙 и опыта во всех играх чата (/boss, /drag, /tournament, /royale, /quiz)!\n\n"
+            f"Хочешь продлить буст ещё на 2 часа? Жми кнопку ниже:",
+            reply_markup=kb
+        )
+    else:
+        p = await db.get_player(message.from_user.id)
+        has_token = bool(p and p.get("chat_boosts_owned", 0) > 0)
+        rows = []
+        if has_token:
+            rows.append([Btn(text="🔥 Активировать свой Буст банды", callback_data=f"boost_activate:{chat_id}")])
+        rows.append([Btn(text="🚀 Запустить Буст чата x2 (29 ⭐️)", url=url)])
+        kb = InlineKeyboardMarkup(inline_keyboard=rows)
+
+        await message.answer(
+            "🔥 <b>БУСТ ДЛЯ ВСЕЙ БАНДЫ / СЧАСТЛИВЫЕ ЧАСЫ (x2)</b> 🔥\n\n"
+            "Сделай щедрый подгон для всех гонщиков этого чата!\n\n"
+            "⭐️ <b>Что даёт буст чата:</b>\n"
+            "• <b>x2 МОНЕТЫ 🪙 и x2 ОПЫТ</b> для ВСЕХ участников чата\n"
+            "• Действует <b>2 часа</b> на все активности:\n"
+            "  👾 Босс-рейды (/boss)\n"
+            "  🏁 Дрэг 402м (/drag)\n"
+            "  🏆 Гран-при турниры (/tournament)\n"
+            "  👑 Королевская битва (/royale)\n"
+            "  🧠 Авто-квиз (/quiz) и 📦 Аирдропы (/airdrop)\n"
+            "• Бот торжественно поздравит тебя и объявит <b>Спонсором Банды</b> на весь чат! 👑\n\n"
+            "Запусти Счастливые Часы всего за <b>29 ⭐️</b> 👇",
+            reply_markup=kb
+        )
+
+
+@router.callback_query(F.data.startswith("boost_activate:"))
+async def cb_boost_activate(cb: CallbackQuery):
+    chat_id = int(cb.data.split(":")[1])
+    uid = cb.from_user.id
+    p = await db.get_player(uid)
+    if not p or p.get("chat_boosts_owned", 0) <= 0:
+        return await cb.answer("У тебя нет готовых жетонов буста чата!", show_alert=True)
+
+    await db.increment(uid, chat_boosts_owned=-1)
+    await db.set_chat_boost(chat_id, hours=2, sponsor_id=uid, sponsor_name=cb.from_user.first_name)
+    await cb.answer("🔥 Буст банды x2 успешно запущен!", show_alert=True)
+    await cb.message.answer(
+        f"🎉 <b>СЧАСТЛИВЫЕ ЧАСЫ АКТИВИРОВАНЫ! БУСТ x2 НА 2 ЧАСА!</b> 🔥\n\n"
+        f"👑 <b>Спонсор банды:</b> {cb.from_user.first_name} (@{cb.from_user.username or '—'})\n\n"
+        f"💰 Теперь все победы и заезды в чате приносят <b>В 2 РАЗА БОЛЬШЕ МОНЕТ 🪙 И ОПЫТА!</b>\n"
+        f"Газ в пол! 🏎💨"
+    )
+
 
 
