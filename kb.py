@@ -16,8 +16,6 @@ def back_kb(cb: str = "menu", text: str = "◀️ Назад") -> InlineKeyboard
 
 def main_menu_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
-    # Верхняя кнопка особой акции
-    b.row(Btn(text="⚡ БАХНУТЬ СОЛИ (10 🪙)", callback_data="salt_boost"))
     # Звёздный магазин Telegram Stars
     b.row(Btn(text="⭐ ЗВЁЗДНЫЙ МАГАЗИН (STARS)", callback_data="stars_shop"))
     # Главная кнопка заездов и гонок
@@ -35,7 +33,7 @@ def main_menu_kb() -> InlineKeyboardMarkup:
         ("❓ Помощь", "help")
     ]:
         b.button(text=text, callback_data=cb)
-    b.adjust(1, 1, 1, 2, 2, 2, 2, 2)
+    b.adjust(1, 1, 2, 2, 2, 2, 2)
     return b.as_markup()
 
 
