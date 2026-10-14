@@ -174,6 +174,9 @@ CREATE TABLE IF NOT EXISTS chat_boosts (
     sponsor_name TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
 );
+CREATE INDEX IF NOT EXISTS idx_player_cars_user ON player_cars(user_id);
+CREATE INDEX IF NOT EXISTS idx_coin_tx_user ON coin_transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_coin_tx_created ON coin_transactions(created_at);
 """
 
 
@@ -322,6 +325,9 @@ CREATE TABLE IF NOT EXISTS chat_boosts (
     sponsor_name TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_player_cars_user ON player_cars(user_id);
+CREATE INDEX IF NOT EXISTS idx_coin_tx_user ON coin_transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_coin_tx_created ON coin_transactions(created_at);
 """
 
 UPGRADE_COLUMNS = {
