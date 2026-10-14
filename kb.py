@@ -234,13 +234,16 @@ def pvp_bet_kb() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def boss_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
+def boss_kb(can_flee: bool = False) -> InlineKeyboardMarkup:
+    rows = [
         [Btn(text="💥 ТАРАНИТЬ (-1 ⚡)", callback_data="boss:hit"),
          Btn(text="🔥 НИТРО-УДАР x2.5 (-2 ⚡)", callback_data="boss:nitro")],
         [Btn(text="📊 Статистика урона", callback_data="boss:stats"),
          Btn(text="🔄 Обновить HP", callback_data="boss:refresh")],
-    ])
+    ]
+    if can_flee:
+        rows.append([Btn(text="🏳️ Сбросить / Сбежать от босса", callback_data="boss:flee")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def wheel_kb(extra_spins: int = 0, is_spinned_today: bool = False, bot_username: str = "") -> InlineKeyboardMarkup:

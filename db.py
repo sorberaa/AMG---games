@@ -1293,6 +1293,21 @@ async def delete_boss(chat_id: int):
         await db.commit()
 
 
+async def get_all_active_bosses() -> list[dict]:
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM bosses WHERE current_hp > 0 ORDER BY created_at DESC")
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def delete_all_bosses() -> int:
+    async with _connect() as db:
+        cur = await db.execute("DELETE FROM bosses")
+        await db.execute("DELETE FROM boss_damage")
+        await db.commit()
+        return cur.rowcount if hasattr(cur, "rowcount") else 0
+
+
 # ── Заявки на вывод монет ─────────────────────────────────────
 
 async def create_withdrawal(user_id: int, amount: int, wallet_info: str) -> int:

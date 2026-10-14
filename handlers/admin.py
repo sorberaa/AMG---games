@@ -31,7 +31,7 @@ def main_kb() -> InlineKeyboardMarkup:
         [Btn(text="📊 Статистика", callback_data="adm:stats"), Btn(text="🪙 Приход/Уход монет", callback_data="adm:coin_flow")],
         [Btn(text="👥 Игроки", callback_data="adm:players:0"), Btn(text="🔎 Найти игрока", callback_data="adm:find")],
         [Btn(text="👑 Список админов", callback_data="adm:admins"), Btn(text="📢 Рассылка", callback_data="adm:broadcast")],
-        [Btn(text="💾 База данных", callback_data="adm:db_info")],
+        [Btn(text="💾 База данных", callback_data="adm:db_info"), Btn(text="👾 Рейдовые боссы", callback_data="adm:bosses")],
         [Btn(text="✖️ Закрыть", callback_data="adm:close")],
     ])
 
@@ -93,6 +93,23 @@ async def cmd_db(message: Message):
         f"ℹ️ <i>{info.get('status_text', '')}</i>"
     )
     await message.answer(text, reply_markup=kb)
+
+
+@router.message(Command("killboss", "bosskill"))
+async def cmd_killboss(message: Message):
+    if not is_admin(message.from_user.id):
+        return await message.answer("❌ У вас нет доступа к этой команде.")
+    parts = (message.text or "").split()
+    if len(parts) > 1 and parts[1].lower() == "all":
+        count = await db.delete_all_bosses()
+        return await message.answer(f"✅ Все активные рейдовые боссы во всех чатах сброшены ({count})!")
+    elif len(parts) > 1 and (parts[1].startswith("-") or parts[1].isdigit()):
+        target_chat = int(parts[1])
+        await db.delete_boss(target_chat)
+        return await message.answer(f"✅ Рейдовый босс в чате {target_chat} успешно сброшен!")
+    else:
+        await db.delete_boss(message.chat.id)
+        return await message.answer("✅ Рейдовый босс в этом чате успешно сброшен! Теперь можно вызвать нового через /boss.")
 
 
 
@@ -405,11 +422,46 @@ async def adm_router(cb: CallbackQuery, state: FSMContext):
         await db.backup_sqlite_to_json()
         await cb.answer("✅ Резервный бэкап сохранен в data/backup_amg_game.json", show_alert=True)
         await show_db_info(cb)
+    elif action == "bosses":
+        await show_active_bosses(cb)
+    elif action == "kill_boss":
+        chat_id = int(parts[2])
+        await db.delete_boss(chat_id)
+        await cb.answer("Босс в чате успешно удален!", show_alert=True)
+        await show_active_bosses(cb)
+    elif action == "kill_all_bosses":
+        count = await db.delete_all_bosses()
+        await cb.answer(f"Все боссы успешно сброшены ({count})!", show_alert=True)
+        await show_active_bosses(cb)
     elif action == "act":
         await start_action(cb, state, parts[2], int(parts[3]))
 
 
 # ── Экраны ───────────────────────────────────────────────────
+
+async def show_active_bosses(cb: CallbackQuery):
+    bosses = await db.get_all_active_bosses()
+    if not bosses:
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [Btn(text="🔄 Обновить", callback_data="adm:bosses")],
+            [Btn(text="◀️ В админку", callback_data="adm:main")]
+        ])
+        return await safe_edit(cb, "👾 <b>Рейдовые боссы AMG Racing</b>\n\nСейчас нет активных или зависших боссов во всех чатах. Всё чисто!", kb)
+
+    lines = ["👾 <b>Активные / рейдовые боссы в группах:</b>\n"]
+    rows = []
+    for b in bosses:
+        chat_id = b["chat_id"]
+        cur_hp = b["current_hp"]
+        max_hp = b["max_hp"]
+        b_name = b["boss_name"]
+        lines.append(f"• Чат <code>{chat_id}</code>: <b>{b_name}</b> ({fmt(cur_hp)}/{fmt(max_hp)} HP)")
+        rows.append([Btn(text=f"❌ Сбросить в {chat_id}", callback_data=f"adm:kill_boss:{chat_id}")])
+
+    rows.append([Btn(text="🔥 Сбросить ВСЕХ боссов", callback_data="adm:kill_all_bosses")])
+    rows.append([Btn(text="🔄 Обновить", callback_data="adm:bosses"), Btn(text="◀️ В админку", callback_data="adm:main")])
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+    await safe_edit(cb, "\n".join(lines), kb)
 
 async def show_db_info(cb: CallbackQuery):
     info = await db.get_db_status()

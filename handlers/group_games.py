@@ -1,3 +1,5 @@
+import html
+import logging
 from datetime import datetime
 import random
 import time
@@ -10,6 +12,9 @@ import data
 from data import CAR_CATALOG, fmt
 from engine import calc_stats, car_upgrades
 from kb import boss_kb
+from utils import is_admin
+
+logger = logging.getLogger("amg.group_games")
 
 router = Router(name="group_games")
 
@@ -49,13 +54,69 @@ BOSS_NAMES = [
 ]
 
 
-@router.message(Command("boss"))
+def get_boss_age_seconds(boss: dict) -> float:
+    c = boss.get("created_at")
+    if not c:
+        return 0.0
+    if isinstance(c, datetime):
+        return max(0.0, (datetime.utcnow() - c.replace(tzinfo=None)).total_seconds())
+    for fmt_str in (db.TS_FMT, "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            dt = datetime.strptime(str(c)[:19], fmt_str)
+            return max(0.0, (datetime.utcnow() - dt).total_seconds())
+        except Exception:
+            pass
+    return 0.0
+
+
+@router.message(Command("boss", "resetboss", "boss_reset", "killboss"))
 async def cmd_boss(message: Message):
     if message.chat.type == "private":
         return await message.answer("👾 Рейд на босса доступен только в группах! Добавь бота в чат и пиши /boss")
 
     chat_id = message.chat.id
+    cmd_text = (message.text or "").strip().lower()
+    is_reset_cmd = any(w in cmd_text for w in ("reset", "clear", "kill"))
+
     boss = await db.get_active_boss(chat_id)
+
+    # Ручной сброс босса
+    if is_reset_cmd:
+        if not boss:
+            return await message.answer("ℹ️ В этом чате сейчас нет активного босса.")
+
+        uid = message.from_user.id
+        is_user_adm = is_admin(uid)
+        if not is_user_adm:
+            try:
+                member = await message.bot.get_chat_member(chat_id, uid)
+                if member.status in ("creator", "administrator"):
+                    is_user_adm = True
+            except Exception:
+                pass
+
+        age = get_boss_age_seconds(boss)
+        if not is_user_adm and age < 900:
+            rem = int(900 - age) // 60
+            return await message.answer(
+                f"⏳ Сбросить босса может админ чата, либо любой игрок через {rem} мин. бездействия!"
+            )
+
+        await db.delete_boss(chat_id)
+        return await message.answer(
+            f"🏳️ <b>Босс «{boss['boss_name']}» успешно сброшен!</b>\n\n"
+            f"Город свободен. Теперь вы можете вызвать нового свежего босса через /boss!"
+        )
+
+    # Автоматическая очистка старого зависшего босса (> 2 часов)
+    if boss and get_boss_age_seconds(boss) > 7200:
+        await db.delete_boss(chat_id)
+        boss = None
+        await message.answer(
+            "💨 <b>Предыдущий босс скрылся от погони!</b>\n"
+            "Время рейда (2 часа) истекло. Дороги свободны — призываем нового босса! 👇"
+        )
+
     if not boss:
         on_cd, rem_t = await check_chat_cooldown(chat_id, "boss", BOSS_COOLDOWN)
         if on_cd:
@@ -72,13 +133,14 @@ async def cmd_boss(message: Message):
             f"{gif_tag}🚨 <b>ТРЕВОГА В ЧАТЕ! ПОЯВИЛСЯ РЕЙДОВЫЙ БОСС!</b>\n\n"
             f"👤 <b>{boss_data['name']}</b>\n"
             f"🚗 Машина: {car['emoji']} <b>{car['name']}</b>\n"
-            f"❤️ Прочность: <b>{boss['current_hp']}/{boss['max_hp']} HP</b>\n"
+            f"❤️ Прочность: <b>{fmt(boss['current_hp'])}/{fmt(boss['max_hp'])} HP</b>\n"
             f"⚡ Способность: <i>{boss_data['ability']}</i>\n"
             f"💬 <i>{boss_data['phrase']}</i>\n\n"
             f"🎁 <b>Призовой фонд победы:</b> {boss_data['coins_pool']} 🪙 монет\n"
-            f"🏆 Дополнительный трофей: <b>{boss_data['loot']}</b>\n\n"
+            f"🏆 Дополнительный трофей: <b>{boss_data['loot']}</b>\n"
+            f"⏱ <i>Время рейда: 2 часа</i>\n\n"
             "Объединяйтесь всем чатом! Выбирайте обычный таран или мощный Нитро-удар! 👇",
-            reply_markup=boss_kb()
+            reply_markup=boss_kb(can_flee=False)
         )
     else:
         pct = int(boss['current_hp'] / boss['max_hp'] * 100)
@@ -86,121 +148,174 @@ async def cmd_boss(message: Message):
         bar = "▰" * bar_len + "▱" * (10 - bar_len)
         gif_tag = f"<a href='{data.AMG_GIFS['boss_rage']}'>&#8205;</a>" if pct <= 40 else f"<a href='{data.AMG_GIFS['boss']}'>&#8205;</a>"
         rage_note = "\n⚠️ <b>ВНИМАНИЕ: БОСС ВПАЛ В ЯРОСТЬ!</b> Контратаки усилены!" if pct <= 40 else ""
+        can_flee = get_boss_age_seconds(boss) > 900
         await message.answer(
             f"{gif_tag}👾 <b>Босс: {boss['boss_name']}</b>\n"
-            f"❤️ {bar} <b>{boss['current_hp']}/{boss['max_hp']} HP</b> ({pct}%){rage_note}\n\n"
+            f"❤️ {bar} <b>{fmt(boss['current_hp'])}/{fmt(boss['max_hp'])} HP</b> ({pct}%){rage_note}\n\n"
             "Все на таран! Давите газ в пол! 👇",
-            reply_markup=boss_kb()
+            reply_markup=boss_kb(can_flee=can_flee)
         )
 
 
 async def execute_boss_strike(cb: CallbackQuery, is_nitro: bool = False):
     """Общая логика нанесения урона боссу (обычный таран или нитро-удар)."""
-    uid = cb.from_user.id
-    chat_id = cb.message.chat.id
-    boss = await db.get_active_boss(chat_id)
-    if not boss:
-        return await cb.answer("Босс уже повержен или скрылся!", show_alert=True)
+    try:
+        uid = cb.from_user.id
+        chat_id = cb.message.chat.id
+        boss = await db.get_active_boss(chat_id)
+        if not boss:
+            return await cb.answer("Босс уже повержен или скрылся!", show_alert=True)
 
-    pc = await db.get_selected_car(uid)
-    if not pc:
-        return await cb.answer("Сначала выбери авто в /start!", show_alert=True)
+        # Проверка на истечение времени рейда (2 часа)
+        if get_boss_age_seconds(boss) > 7200:
+            await db.delete_boss(chat_id)
+            await cb.answer("💨 Время рейда истекло! Босс скрылся в неизвестном направлении.", show_alert=True)
+            try:
+                await cb.message.edit_text(
+                    f"💨 <b>БОСС СКРЫЛСЯ!</b>\n\n"
+                    f"Время рейда (2 часа) истекло. Босс уехал чиниться на базу.\n"
+                    f"Вызовите нового босса командой /boss!",
+                    reply_markup=None
+                )
+            except Exception:
+                pass
+            return
 
-    energy_cost = 2 if is_nitro else 1
-    p = await db.get_player(uid)
-    if p["energy"] < energy_cost:
-        return await cb.answer(f"⚡ Нужно {energy_cost} энергии! Подожди или восстанови в магазине.", show_alert=True)
+        # 1. ОБЯЗАТЕЛЬНО восстанавливаем энергию игрока перед проверкой!
+        await db.regen_energy(uid)
+        p = await db.get_player(uid)
+        if not p:
+            return await cb.answer("Сначала запусти игру в /start!", show_alert=True)
 
-    # Списываем энергию
-    for _ in range(energy_cost):
-        await db.use_energy(uid)
+        pc = await db.get_selected_car(uid)
+        if not pc:
+            return await cb.answer("Сначала выбери авто в /start!", show_alert=True)
 
-    car = CAR_CATALOG[pc["car_key"]]
-    st = calc_stats(car, car_upgrades(pc))
+        energy_cost = 2 if is_nitro else 1
+        if p["energy"] < energy_cost:
+            return await cb.answer(
+                f"⚡ Нужно {energy_cost} энергии! У тебя сейчас {p['energy']}⚡.\n"
+                f"Энергия восстанавливается каждые 30 мин или мгновенно в магазине.",
+                show_alert=True
+            )
 
-    # Базовый урон от характеристик авто
-    dmg_mult = random.uniform(0.8, 1.2)
-    base_dmg = int(st["rating"] * dmg_mult)
+        # Списываем энергию
+        for _ in range(energy_cost):
+            await db.use_energy(uid)
 
-    # Нитро-удар: x2.5 урон + шанс крита 35%
-    is_crit = False
-    if is_nitro:
-        base_dmg = int(base_dmg * 2.5)
-        if random.random() < 0.35:
-            is_crit = True
-            base_dmg = int(base_dmg * 1.5)
+        car = CAR_CATALOG.get(pc["car_key"], CAR_CATALOG["c180"])
+        st = calc_stats(car, car_upgrades(pc))
 
-    # Бонусы за расходники чата
-    if p.get("chat_nitro_until"):
-        base_dmg = int(base_dmg * 1.2)
-    if p.get("gold_wrap"):
-        base_dmg = int(base_dmg * 1.15)
+        # Базовый урон от характеристик авто
+        dmg_mult = random.uniform(0.85, 1.25)
+        base_dmg = max(50, int(st["rating"] * dmg_mult))
 
-    cur_hp, dead = await db.damage_boss(chat_id, uid, base_dmg)
+        # Нитро-удар: x2.5 урон + шанс крита 35%
+        is_crit = False
+        if is_nitro:
+            base_dmg = int(base_dmg * 2.5)
+            if random.random() < 0.35:
+                is_crit = True
+                base_dmg = int(base_dmg * 1.5)
 
-    crit_alert = " 💥 КРИТИЧЕСКИЙ ВЫБРОС ТУРБО!" if is_crit else ""
-    strike_type = "🔥 НИТРО-УДАР" if is_nitro else "💥 ТАРАН"
-    await cb.answer(f"{strike_type}: -{fmt(base_dmg)} HP!{crit_alert}")
+        # Бонусы за расходники чата
+        if p.get("chat_nitro_until"):
+            base_dmg = int(base_dmg * 1.2)
+        if p.get("gold_wrap"):
+            base_dmg = int(base_dmg * 1.15)
 
-    if dead:
-        damagers = await db.get_boss_damagers(chat_id)
-        medals = ["🥇", "🥈", "🥉"]
-        lines = []
-        for i, d in enumerate(damagers[:8]):
-            m = medals[i] if i < 3 else f"{i + 1}."
-            lines.append(f"{m} <b>{d['first_name']}</b> — <b>{fmt(d['damage'])}</b> HP")
+        cur_hp, dead = await db.damage_boss(chat_id, uid, base_dmg)
 
-        # Щедрые награды по местам (сбалансировано)
-        boost = await db.get_chat_boost(chat_id)
-        boost_mult = 2 if boost else 1
-        boost_note = f"\n\n🔥 <b>Применён Буст чата x2! Награды удвоены спонсором {boost['sponsor_name']}!</b>" if boost else ""
+        crit_alert = " 💥 КРИТ!" if is_crit else ""
+        strike_type = "🔥 НИТРО" if is_nitro else "💥 ТАРАН"
 
-        for i, d in enumerate(damagers):
-            target_uid = d["user_id"]
-            if i == 0:
-                coins = 35
-                xp = 1200
-            elif i < 3:
-                coins = 20
-                xp = 700
-            elif i < 10:
-                coins = 12
-                xp = 350
-            else:
-                coins = 6
-                xp = 150
+        # Мгновенный отклик игроку с остатком HP босса
+        if dead:
+            await cb.answer(f"🏆 ФИНИШНЫЙ УДАР! -{fmt(base_dmg)} HP! БОСС УНИЧТОЖЕН!", show_alert=False)
+        else:
+            await cb.answer(f"{strike_type}: -{fmt(base_dmg)} HP! (Осталось: {fmt(cur_hp)} HP){crit_alert}", show_alert=False)
 
-            await db.grant_coins(target_uid, coins * boost_mult, reason=f"Победа над боссом {boss['boss_name']}")
-            await db.add_xp(target_uid, xp * boost_mult)
+        if dead:
+            # 1. Первым делом удаляем босса, чтобы параллельные клики не сбоили
+            await db.delete_boss(chat_id)
+            await db.set_cooldown(f"boss:{chat_id}", time.time())
 
-        gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
-        await db.delete_boss(chat_id)
-        await db.set_cooldown(f"boss:{chat_id}", time.time())
-        await cb.message.answer(
-            f"{gif_tag}🏆 <b>БОСС «{boss['boss_name']}» ПОЛНОСТЬЮ УНИЧТОЖЕН!</b>\n\n"
-            f"🎉 Чат одержал сокрушительную победу! Все участники битвы получили награды (монеты 🪙 и опыт XP).{boost_note}\n\n"
-            f"👑 <b>ГЕРОИ БИТВЫ (ТОП ПО УРОНУ):</b>\n" + "\n".join(lines)
-        )
-    else:
-        # Регулярно обновляем сообщение босса в чате
-        pct = int(cur_hp / boss['max_hp'] * 100)
-        bar_len = max(0, min(10, int(cur_hp / boss['max_hp'] * 10)))
-        bar = "▰" * bar_len + "▱" * (10 - bar_len)
-        gif_tag = f"<a href='{data.AMG_GIFS['boss_rage']}'>&#8205;</a>" if pct <= 40 else f"<a href='{data.AMG_GIFS['boss']}'>&#8205;</a>"
-        rage_warning = "\n⚠️ <b>ФАЗА ЯРОСТИ:</b> Босс огрызается и выпускает клубы дыма!" if pct <= 40 else ""
+            damagers = await db.get_boss_damagers(chat_id)
+            medals = ["🥇", "🥈", "🥉"]
+            lines = []
+            for i, d in enumerate(damagers[:8]):
+                m = medals[i] if i < 3 else f"{i + 1}."
+                safe_name = html.escape(d.get("first_name") or "Гонщик")
+                lines.append(f"{m} <b>{safe_name}</b> — <b>{fmt(d['damage'])}</b> HP")
 
-        # Обновляем сообщение раз в несколько атак или при критическом ударе
-        if random.random() < 0.4 or is_crit:
+            # Щедрые награды по местам (сбалансировано)
+            boost = await db.get_chat_boost(chat_id)
+            boost_mult = 2 if boost else 1
+            boost_note = f"\n\n🔥 <b>Применён Буст чата x2! Награды удвоены спонсором {boost['sponsor_name']}!</b>" if boost else ""
+
+            for i, d in enumerate(damagers):
+                target_uid = d["user_id"]
+                if i == 0:
+                    coins = 35
+                    xp = 1200
+                elif i < 3:
+                    coins = 20
+                    xp = 700
+                elif i < 10:
+                    coins = 12
+                    xp = 350
+                else:
+                    coins = 6
+                    xp = 150
+
+                await db.grant_coins(target_uid, coins * boost_mult, reason=f"Победа над боссом {boss['boss_name']}")
+                await db.add_xp(target_uid, xp * boost_mult)
+
+            # Редактируем старое сообщение босса, убирая кнопки
+            try:
+                killer_name = html.escape(cb.from_user.first_name)
+                await cb.message.edit_text(
+                    f"🏆 <b>БОСС «{boss['boss_name']}» ПОЛНОСТЬЮ УНИЧТОЖЕН!</b>\n\n"
+                    f"💀 Победный таран нанёс: <b>{killer_name}</b>!\n"
+                    f"🎉 Чат одержал сокрушительную победу, награды начислены!",
+                    reply_markup=None
+                )
+            except Exception:
+                pass
+
+            gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
+            await cb.message.answer(
+                f"{gif_tag}🏆 <b>БОСС «{boss['boss_name']}» ПОЛНОСТЬЮ УНИЧТОЖЕН!</b>\n\n"
+                f"🎉 Чат одержал сокрушительную победу! Все участники битвы получили награды (монеты 🪙 и опыт XP).{boost_note}\n\n"
+                f"👑 <b>ГЕРОИ БИТВЫ (ТОП ПО УРОНУ):</b>\n" + ("\n".join(lines) if lines else "—")
+            )
+        else:
+            # Обновляем сообщение босса в чате
+            pct = int(cur_hp / boss['max_hp'] * 100)
+            bar_len = max(0, min(10, int(cur_hp / boss['max_hp'] * 10)))
+            bar = "▰" * bar_len + "▱" * (10 - bar_len)
+            gif_tag = f"<a href='{data.AMG_GIFS['boss_rage']}'>&#8205;</a>" if pct <= 40 else f"<a href='{data.AMG_GIFS['boss']}'>&#8205;</a>"
+            rage_warning = "\n⚠️ <b>ФАЗА ЯРОСТИ:</b> Босс огрызается и выпускает клубы дыма!" if pct <= 40 else ""
+            can_flee = get_boss_age_seconds(boss) > 900
+            attacker_name = html.escape(cb.from_user.first_name)
+
             try:
                 await cb.message.edit_text(
                     f"{gif_tag}👾 <b>Босс: {boss['boss_name']}</b>\n"
                     f"❤️ {bar} <b>{fmt(cur_hp)}/{fmt(boss['max_hp'])} HP</b> ({pct}%){rage_warning}\n\n"
-                    f"⚡ Последняя атака: <b>{cb.from_user.first_name}</b> ({strike_type} -{fmt(base_dmg)} HP!{crit_alert})\n\n"
+                    f"⚡ Последняя атака: <b>{attacker_name}</b> ({strike_type} -{fmt(base_dmg)} HP!{crit_alert})\n\n"
                     "Продолжайте натиск! 👇",
-                    reply_markup=boss_kb()
+                    reply_markup=boss_kb(can_flee=can_flee)
                 )
             except Exception:
                 pass
+
+    except Exception as e:
+        logger.exception("Error in execute_boss_strike: %s", e)
+        try:
+            await cb.answer("⚠️ Ошибка атаки. Попробуйте ещё раз.", show_alert=True)
+        except Exception:
+            pass
 
 
 @router.callback_query(F.data == "boss:hit")
@@ -218,21 +333,22 @@ async def cb_boss_refresh(cb: CallbackQuery):
     chat_id = cb.message.chat.id
     boss = await db.get_active_boss(chat_id)
     if not boss:
-        return await cb.answer("Босс уже повержен!", show_alert=True)
+        return await cb.answer("Босс уже повержен или скрылся!", show_alert=True)
     pct = int(boss['current_hp'] / boss['max_hp'] * 100)
     bar_len = max(0, min(10, int(boss['current_hp'] / boss['max_hp'] * 10)))
     bar = "▰" * bar_len + "▱" * (10 - bar_len)
     gif_tag = f"<a href='{data.AMG_GIFS['boss_rage']}'>&#8205;</a>" if pct <= 40 else f"<a href='{data.AMG_GIFS['boss']}'>&#8205;</a>"
+    can_flee = get_boss_age_seconds(boss) > 900
     try:
         await cb.message.edit_text(
             f"{gif_tag}👾 <b>Босс: {boss['boss_name']}</b>\n"
             f"❤️ {bar} <b>{fmt(boss['current_hp'])}/{fmt(boss['max_hp'])} HP</b> ({pct}%)\n\n"
             "Все на таран! Давите газ в пол! 👇",
-            reply_markup=boss_kb()
+            reply_markup=boss_kb(can_flee=can_flee)
         )
-        await cb.answer("Статус HP обновлен")
     except Exception:
-        await cb.answer()
+        pass
+    await cb.answer(f"❤️ Текущее HP: {fmt(boss['current_hp'])}/{fmt(boss['max_hp'])} HP ({pct}%)", show_alert=True)
 
 
 @router.callback_query(F.data == "boss:stats")
@@ -244,6 +360,42 @@ async def cb_boss_stats(cb: CallbackQuery):
     medals = ["🥇", "🥈", "🥉"]
     lines = [f"{medals[i] if i < 3 else str(i+1)+'.'} {d['first_name']} — {fmt(d['damage'])} HP" for i, d in enumerate(damagers[:10])]
     await cb.answer("\n".join(lines), show_alert=True)
+
+
+@router.callback_query(F.data == "boss:flee")
+async def cb_boss_flee(cb: CallbackQuery):
+    chat_id = cb.message.chat.id
+    boss = await db.get_active_boss(chat_id)
+    if not boss:
+        return await cb.answer("Босс уже повержен или не активен!", show_alert=True)
+
+    uid = cb.from_user.id
+    is_user_adm = is_admin(uid)
+    if not is_user_adm:
+        try:
+            member = await cb.bot.get_chat_member(chat_id, uid)
+            if member.status in ("creator", "administrator"):
+                is_user_adm = True
+        except Exception:
+            pass
+
+    age = get_boss_age_seconds(boss)
+    if not is_user_adm and age < 900:
+        rem = int(900 - age) // 60
+        return await cb.answer(f"⏳ Сбросить босса можно через {rem} мин. бездействия (или это может сделать админ чата)!", show_alert=True)
+
+    await db.delete_boss(chat_id)
+    await cb.answer("🏳️ Босс успешно сброшен!", show_alert=True)
+    try:
+        user_name = html.escape(cb.from_user.first_name)
+        await cb.message.edit_text(
+            f"💨 <b>РЕЙД ПРЕКРАЩЁН!</b>\n\n"
+            f"👤 Игрок <b>{user_name}</b> отменил текущего босса.\n"
+            f"Босс скрылся в тумане. Теперь вы можете вызвать нового босса командой /boss!",
+            reply_markup=None
+        )
+    except Exception:
+        pass
 
 
 
