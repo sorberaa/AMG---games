@@ -441,10 +441,19 @@ async def adm_router(cb: CallbackQuery, state: FSMContext, player: dict = None):
         except Exception:
             return
 
-    try:
-        await cb.answer()
-    except Exception:
-        pass
+    has_answered = False
+
+    async def notify(text: str = None):
+        nonlocal has_answered
+        if not has_answered:
+            try:
+                if text:
+                    await cb.answer(text, show_alert=True)
+                else:
+                    await cb.answer()
+                has_answered = True
+            except Exception:
+                pass
 
     try:
         parts = cb.data.split(":")
@@ -452,32 +461,44 @@ async def adm_router(cb: CallbackQuery, state: FSMContext, player: dict = None):
 
         if action == "main":
             await state.clear()
+            await notify()
             await safe_edit(cb, MAIN_TEXT, main_kb())
         elif action == "close":
             await state.clear()
+            await notify()
             await cb.message.delete()
         elif action == "stats":
+            await notify()
             await show_stats(cb)
         elif action == "coin_flow":
+            await notify()
             await show_coin_flow(cb)
         elif action == "players":
+            await notify()
             page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
             await show_players(cb, page)
         elif action == "p":
+            await notify()
             await show_player(cb, int(parts[2]))
         elif action == "find":
+            await notify()
             await state.set_state(Adm.find_player)
             await safe_edit(cb, "🔎 Отправь <b>ID</b> или <b>@username</b> игрока:", back_kb())
         elif action == "admins":
+            await notify()
             await show_admins(cb)
         elif action == "add_admin":
+            await notify()
             await state.set_state(Adm.add_admin)
             await safe_edit(cb, "➕ <b>Добавление админа</b>\n\nОтправь цифровой <b>Telegram ID</b>, перешли сюда сообщение от игрока, либо укажи его <b>@username</b>:\n\n<i>Для отмены напиши: /admin</i>", back_kb("adm:admins"))
         elif action == "pick_admin_user":
+            await notify()
             await show_pick_admin_user(cb, int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0)
         elif action == "make_adm_direct":
             await make_adm_direct(cb, int(parts[2]))
+            await notify("✅ Игрок назначен администратором!")
         elif action == "broadcast":
+            await notify()
             await state.set_state(Adm.broadcast)
             await safe_edit(cb, "📢 Отправь текст рассылки (поддерживается HTML).\nДля отмены — /admin", back_kb())
         elif action == "energy":
@@ -485,32 +506,27 @@ async def adm_router(cb: CallbackQuery, state: FSMContext, player: dict = None):
             p = await db.get_player(target_uid)
             if p:
                 await db.update_player(target_uid, energy=p["max_energy"])
-                try:
-                    await cb.answer(f"⚡ Энергия игрока {p['first_name']} восстановлена до максимума ({p['max_energy']})!", show_alert=True)
-                except Exception:
-                    pass
+                await notify(f"⚡ Энергия игрока {p['first_name']} восстановлена до максимума ({p['max_energy']})!")
+            else:
+                await notify()
             await show_player(cb, target_uid)
         elif action == "menu_c":
+            await notify()
             await show_player_coins_menu(cb, int(parts[2]))
         elif action == "give_c":
             target_uid = int(parts[2])
             amt = int(parts[3])
             await db.add_coins_admin(target_uid, amt, reason="Админ-панель")
             sign = "+" if amt > 0 else ""
-            try:
-                await cb.answer(f"🪙 Баланс изменен: {sign}{amt} монет!", show_alert=True)
-            except Exception:
-                pass
+            await notify(f"🪙 Баланс изменен: {sign}{amt} монет!")
             await show_player_coins_menu(cb, target_uid)
         elif action == "set_c_zero":
             target_uid = int(parts[2])
             await db.update_player(target_uid, coins=0, money=0)
-            try:
-                await cb.answer("0️⃣ Баланс игрока обнулен (0 🪙)!", show_alert=True)
-            except Exception:
-                pass
+            await notify("0️⃣ Баланс игрока обнулен (0 🪙)!")
             await show_player_coins_menu(cb, target_uid)
         elif action == "menu_lvl":
+            await notify()
             await show_player_lvl_menu(cb, int(parts[2]))
         elif action == "add_lvl":
             target_uid = int(parts[2])
@@ -519,40 +535,31 @@ async def adm_router(cb: CallbackQuery, state: FSMContext, player: dict = None):
             if p:
                 new_lvl = min(100, p["level"] + delta)
                 await db.update_player(target_uid, level=new_lvl)
-                try:
-                    await cb.answer(f"🆙 Уровень изменен: +{delta} ➔ {new_lvl} ур.!", show_alert=True)
-                except Exception:
-                    pass
+                await notify(f"🆙 Уровень изменен: +{delta} ➔ {new_lvl} ур.!")
+            else:
+                await notify()
             await show_player_lvl_menu(cb, target_uid)
         elif action == "set_lvl":
             target_uid = int(parts[2])
             new_lvl = int(parts[3])
             await db.update_player(target_uid, level=new_lvl, xp=0)
-            try:
-                await cb.answer(f"🎯 Установлен {new_lvl} уровень!", show_alert=True)
-            except Exception:
-                pass
+            await notify(f"🎯 Установлен {new_lvl} уровень!")
             await show_player_lvl_menu(cb, target_uid)
         elif action == "add_xp":
             target_uid = int(parts[2])
             xp_amt = int(parts[3])
             await db.add_xp(target_uid, xp_amt)
-            try:
-                await cb.answer(f"📈 Начислено +{xp_amt} XP!", show_alert=True)
-            except Exception:
-                pass
+            await notify(f"📈 Начислено +{xp_amt} XP!")
             await show_player_lvl_menu(cb, target_uid)
         elif action == "menu_cars":
+            await notify()
             await show_player_cars_menu(cb, int(parts[2]))
         elif action == "give_car_key":
             target_uid = int(parts[2])
             car_key = parts[3]
             await db.add_car(target_uid, car_key)
             car_name = CAR_CATALOG.get(car_key, {}).get("name", car_key)
-            try:
-                await cb.answer(f"🚗 Выдан автомобиль: {car_name}!", show_alert=True)
-            except Exception:
-                pass
+            await notify(f"🚗 Выдан автомобиль: {car_name}!")
             await show_player_cars_menu(cb, target_uid)
         elif action == "full_tune":
             target_uid = int(parts[2])
@@ -561,29 +568,21 @@ async def adm_router(cb: CallbackQuery, state: FSMContext, player: dict = None):
                 cars = await db.get_player_cars(target_uid)
                 car = cars[0] if cars else None
             if not car:
-                try:
-                    await cb.answer("❌ У игрока нет авто в гараже! Сначала выдайте машину.", show_alert=True)
-                except Exception:
-                    pass
+                await notify("❌ У игрока нет авто в гараже! Сначала выдайте машину.")
                 return await show_player(cb, target_uid)
             for part in db.UPGRADE_COLUMNS:
                 await db.upgrade_car(car["id"], part, 5)
             car_name = CAR_CATALOG.get(car["car_key"], {}).get("name", "Авто")
-            try:
-                await cb.answer(f"🚀 Все 13 узлов тюнинга для {car_name} прокачаны до MAX (5 ур.)!", show_alert=True)
-            except Exception:
-                pass
+            await notify(f"🚀 Все 13 узлов тюнинга для {car_name} прокачаны до MAX (5 ур.)!")
             await show_player(cb, target_uid)
         elif action == "menu_vip":
+            await notify()
             await show_player_vip_menu(cb, int(parts[2]))
         elif action == "give_vip":
             target_uid = int(parts[2])
             days = int(parts[3])
             await db.add_vip(target_uid, days)
-            try:
-                await cb.answer(f"👑 VIP статус выдан на {days} дней!", show_alert=True)
-            except Exception:
-                pass
+            await notify(f"👑 VIP статус выдан на {days} дней!")
             await show_player_vip_menu(cb, target_uid)
         elif action == "toggle_wrap":
             target_uid = int(parts[2])
@@ -592,55 +591,39 @@ async def adm_router(cb: CallbackQuery, state: FSMContext, player: dict = None):
                 new_wrap = 0 if p.get("gold_wrap") else 1
                 await db.update_player(target_uid, gold_wrap=new_wrap)
                 status_str = "включен" if new_wrap else "отключен"
-                try:
-                    await cb.answer(f"✨ Золотой винил {status_str}!", show_alert=True)
-                except Exception:
-                    pass
+                await notify(f"✨ Золотой винил {status_str}!")
+            else:
+                await notify()
             await show_player_vip_menu(cb, target_uid)
         elif action == "give_ins":
             target_uid = int(parts[2])
             await db.update_player(target_uid, has_insurance=1)
-            try:
-                await cb.answer("🛡 Страховка AMG активирована!", show_alert=True)
-            except Exception:
-                pass
+            await notify("🛡 Страховка AMG активирована!")
             await show_player_vip_menu(cb, target_uid)
         elif action == "give_spins":
             target_uid = int(parts[2])
             spins = int(parts[3])
             await db.increment(target_uid, extra_spins=spins)
-            try:
-                await cb.answer(f"🎰 Выдано +{spins} спинов Колеса Фортуны!", show_alert=True)
-            except Exception:
-                pass
+            await notify(f"🎰 Выдано +{spins} спинов Колеса Фортуны!")
             await show_player_vip_menu(cb, target_uid)
         elif action == "give_plate":
             target_uid = int(parts[2])
             plates = int(parts[3])
             await db.increment(target_uid, custom_plates=plates)
-            try:
-                await cb.answer(f"🏷 Выдано +{plates} блатных госномеров!", show_alert=True)
-            except Exception:
-                pass
+            await notify(f"🏷 Выдано +{plates} блатных госномеров!")
             await show_player_vip_menu(cb, target_uid)
         elif action == "give_max_e":
             target_uid = int(parts[2])
             e = int(parts[3])
             await db.increment(target_uid, max_energy=e, energy=e)
-            try:
-                await cb.answer(f"🔋 Макс. энергия увеличена на +{e}!", show_alert=True)
-            except Exception:
-                pass
+            await notify(f"🔋 Макс. энергия увеличена на +{e}!")
             await show_player_vip_menu(cb, target_uid)
         elif action == "give_chat_nitro":
             target_uid = int(parts[2])
             now = datetime.utcnow()
             nitro_until = (now + timedelta(hours=24)).strftime(db.TS_FMT)
             await db.update_player(target_uid, chat_nitro_until=nitro_until)
-            try:
-                await cb.answer("⚡ Нитро-буст чата выдан на 24 часа!", show_alert=True)
-            except Exception:
-                pass
+            await notify("⚡ Нитро-буст чата выдан на 24 часа!")
             await show_player_vip_menu(cb, target_uid)
         elif action == "reset_cd":
             target_uid = int(parts[2])
@@ -658,19 +641,16 @@ async def adm_router(cb: CallbackQuery, state: FSMContext, player: dict = None):
                     last_adventure=None,
                     energy=p["max_energy"],
                 )
-                try:
-                    await cb.answer(f"🔄 Все кулдауны и лимиты для {p['first_name']} сброшены!", show_alert=True)
-                except Exception:
-                    pass
+                await notify(f"🔄 Все кулдауны и лимиты для {p['first_name']} сброшены!")
+            else:
+                await notify()
             await show_player(cb, target_uid)
         elif action == "msg_user":
             target_uid = int(parts[2])
             p = await db.get_player(target_uid)
             if not p:
-                try:
-                    return await cb.answer("Игрок не найден!", show_alert=True)
-                except Exception:
-                    return
+                return await notify("Игрок не найден!")
+            await notify()
             await state.update_data(target_uid=target_uid, target_name=p.get("first_name", "Гонщик"))
             await state.set_state(Adm.msg_user)
             await safe_edit(
@@ -687,44 +667,49 @@ async def adm_router(cb: CallbackQuery, state: FSMContext, player: dict = None):
         elif action == "toggle_ban":
             await toggle_ban(cb, int(parts[2]))
         elif action == "stars_withdraw":
+            await notify()
             await show_stars_withdraw(cb)
         elif action == "remove_admin_prompt":
+            await notify()
             await state.set_state(Adm.remove_admin)
             await safe_edit(cb, "🗑 <b>УДАЛЕНИЕ АДМИНИСТРАТОРА</b>\n\nОтправьте <b>Telegram ID</b> или <b>@username</b> администратора, которого нужно снять:\n\n<i>Для отмены напишите /admin</i>", back_kb("adm:admins"))
         elif action == "db_info":
+            await notify()
             await show_db_info(cb)
         elif action == "db_backup":
             await db.backup_sqlite_to_json()
-            try:
-                await cb.answer("✅ Резервный бэкап сохранен в data/backup_amg_game.json", show_alert=True)
-            except Exception:
-                pass
+            await notify("✅ Резервный бэкап сохранен в data/backup_amg_game.json")
             await show_db_info(cb)
         elif action == "bosses":
+            await notify()
             await show_active_bosses(cb)
         elif action == "kill_boss":
             chat_id = int(parts[2])
             await db.delete_boss(chat_id)
-            try:
-                await cb.answer("Босс в чате успешно удален!", show_alert=True)
-            except Exception:
-                pass
+            await notify("Босс в чате успешно удален!")
             await show_active_bosses(cb)
         elif action == "kill_all_bosses":
             count = await db.delete_all_bosses()
-            try:
-                await cb.answer(f"Все боссы успешно сброшены ({count})!", show_alert=True)
-            except Exception:
-                pass
+            await notify(f"Все боссы успешно сброшены ({count})!")
             await show_active_bosses(cb)
         elif action == "act":
+            await notify()
             await start_action(cb, state, parts[2], int(parts[3]))
+        else:
+            await notify()
     except Exception as e:
         logger.exception("Error in adm_router: %s", e)
+        await notify(f"⚠️ Ошибка: {e}")
         try:
-            await cb.answer(f"⚠️ Ошибка выполнения: {e}", show_alert=True)
+            await cb.message.answer(f"⚠️ <b>Ошибка админ-панели:</b> <code>{html.escape(str(e))}</code>")
         except Exception:
             pass
+    finally:
+        if not has_answered:
+            try:
+                await cb.answer()
+            except Exception:
+                pass
 
 
 # ── Экраны ───────────────────────────────────────────────────
@@ -791,6 +776,14 @@ async def show_stats(cb: CallbackQuery):
 
 
 
+def str_date(val) -> str:
+    if not val:
+        return ""
+    if hasattr(val, "strftime"):
+        return val.strftime("%Y-%m-%d %H:%M:%S")
+    return str(val)
+
+
 async def show_coin_flow(cb: CallbackQuery):
     flow = await db.get_coin_flow_stats()
     txs = await db.get_recent_coin_txs(12)
@@ -799,7 +792,8 @@ async def show_coin_flow(cb: CallbackQuery):
         sign = "+" if t["amount"] > 0 else ""
         name = html.escape(str(t["first_name"] or t["user_id"]))
         reason = html.escape(str(t["reason"] or ""))
-        time_part = t["created_at"][11:16] if len(t["created_at"]) >= 16 else ""
+        created_raw = str_date(t.get("created_at"))
+        time_part = created_raw[11:16] if len(created_raw) >= 16 else created_raw[:10]
         tx_lines.append(f"• <code>{time_part}</code> {name}: <b>{sign}{t['amount']} 🪙</b> ({reason})")
     tx_text = "\n".join(tx_lines) if tx_lines else "<i>Транзакций пока нет</i>"
 
@@ -838,8 +832,8 @@ async def show_players(cb: CallbackQuery, page: int):
 
 
 def player_card(p: dict, cars: list) -> str:
-    role = "👑 Главный админ" if p["user_id"] in ADMIN_IDS else ("👑 Админ" if p["is_admin"] else "👤 Игрок")
-    status = "🚫 Забанен" if p["is_banned"] else "✅ Активен"
+    role = "👑 Главный админ" if p["user_id"] in ADMIN_IDS else ("👑 Админ" if p.get("is_admin") else "👤 Игрок")
+    status = "🚫 Забанен" if p.get("is_banned") else "✅ Активен"
     car_list = ", ".join(CAR_CATALOG[c["car_key"]]["name"].replace("Mercedes-AMG ", "") for c in cars[:8]
                          if c["car_key"] in CAR_CATALOG)
     if len(cars) > 8:
@@ -849,14 +843,16 @@ def player_card(p: dict, cars: list) -> str:
     extra_status = f"\n{ins_status}" + (f" · {wrap_status}" if wrap_status else "")
     first_name = html.escape(p.get("first_name") or "Гонщик")
     uname = html.escape(p.get("username") or "—")
+    created_str = str_date(p.get("created_at"))[:10] or "недавно"
+    today_coins = p.get("coins_today", 0) if p.get("coins_date") else 0
     return (
         f"👤 <b>{first_name}</b> (@{uname})\n"
         f"🆔 <code>{p['user_id']}</code>\n{role} · {status}{extra_status}\n\n"
-        f"📊 Уровень: {p['level']} ({p['xp']} XP)\n"
-        f"🪙 Баланс: {fmt(p['coins'])} монет (сегодня добыто: {p['coins_today'] if p['coins_date'] else 0})\n"
-        f"⚡ Энергия: {p['energy']}/{p['max_energy']}\n⭐ Репутация: {p['reputation']}\n"
-        f"🏁 Гонок: {p['races_total']} · 🏆 {p['wins']} · 💀 {p['losses']}\n"
-        f"🔥 Стрик: {p['daily_streak']}\n📅 С нами с: {p['created_at'][:10]}\n\n"
+        f"📊 Уровень: {p.get('level', 1)} ({p.get('xp', 0)} XP)\n"
+        f"🪙 Баланс: {fmt(p.get('coins', 0))} монет (сегодня добыто: {today_coins})\n"
+        f"⚡ Энергия: {p.get('energy', 10)}/{p.get('max_energy', 10)}\n⭐ Репутация: {p.get('reputation', 0)}\n"
+        f"🏁 Гонок: {p.get('races_total', 0)} · 🏆 {p.get('wins', 0)} · 💀 {p.get('losses', 0)}\n"
+        f"🔥 Стрик: {p.get('daily_streak', 0)}\n📅 С нами с: {created_str}\n\n"
         f"🚗 Машины ({len(cars)}): {car_list or '—'}"
     )
 
@@ -920,12 +916,20 @@ async def show_player_vip_menu(cb: CallbackQuery, uid: int):
     if not p:
         return await safe_edit(cb, "❌ Игрок не найден", back_kb())
     vip_active = False
-    if p.get("vip_until"):
+    raw_vip = p.get("vip_until")
+    vip_date_str = ""
+    if raw_vip:
         try:
-            vip_active = datetime.strptime(p["vip_until"], db.TS_FMT) > datetime.utcnow()
+            if isinstance(raw_vip, datetime):
+                vip_active = raw_vip > datetime.utcnow()
+                vip_date_str = raw_vip.strftime("%Y-%m-%d")
+            else:
+                vip_str_val = str(raw_vip)
+                vip_active = datetime.strptime(vip_str_val[:19], db.TS_FMT) > datetime.utcnow()
+                vip_date_str = vip_str_val[:10]
         except Exception:
-            pass
-    vip_str = f"✅ До {p['vip_until'][:10]}" if vip_active else "❌ Не активен"
+            vip_date_str = str_date(raw_vip)[:10]
+    vip_str = f"✅ До {vip_date_str}" if (vip_active and vip_date_str) else "❌ Не активен"
     wrap_str = "✨ Активен" if p.get("gold_wrap") else "⚪ Нет"
     ins_str = "🛡 Есть" if p.get("has_insurance") else "⚪ Нет"
     text = (

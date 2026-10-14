@@ -50,7 +50,7 @@ async def api_status(request):
         "bot_username": bot_username,
         "cars_count": len(CAR_CATALOG),
         "service": "AMG Racing",
-        "version": "2.1.0",
+        "version": "2.1.2",
     })
 
 
