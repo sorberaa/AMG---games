@@ -745,6 +745,20 @@ async def init_db() -> None:
 
     await restore_sqlite_from_json()
 
+    # Разовая автоматическая компенсация для Андрея (user_id = 1004239118) за урезанную продажу авто (>600 монет)
+    try:
+        async with _connect() as db_c:
+            cur = await db_c.execute(
+                "SELECT 1 FROM coin_transactions WHERE user_id = ? AND reason LIKE ?",
+                (1004239118, "%Компенсация%"),
+            )
+            has_comp = await cur.fetchone()
+            if not has_comp:
+                await add_coins(1004239118, 650, reason="Компенсация за продажу автомобиля")
+                logger.info("Restored 650 coins to Andrei (1004239118)")
+    except Exception as e:
+        logger.warning(f"Compensation check failed: {e}")
+
 
 
 # ── Игроки ───────────────────────────────────────────────────
@@ -830,11 +844,10 @@ async def set_cooldown(target_key: str, ts: float) -> None:
 
 async def add_coins(user_id: int, amount: int, reason: str = "Награда") -> None:
     """Единая функция начисления игровой валюты (монеты 🪙)."""
-    # Защита от аномальных сумм и дюпов: для обычных наград максимум 500 монет,
-    # но для официальных покупок Stars и админских операций — полное начисление без ограничений!
-    is_trusted = any(w in reason.lower() for w in ["админ", "admin", "stars", "звёзд", "звезд", "донат", "покупка"])
-    if amount > 500 and not is_trusted:
-        amount = 100
+    if amount == 0:
+        return
+    # Защита от переполнения/аномальных сбоев (до ±1 000 000 монет)
+    amount = max(-1_000_000, min(int(amount), 1_000_000))
 
     async with _connect() as db:
         await db.execute(
@@ -842,8 +855,7 @@ async def add_coins(user_id: int, amount: int, reason: str = "Награда") -
             (amount, amount, user_id)
         )
         await db.commit()
-    if amount != 0:
-        await log_coin_tx(user_id, amount, reason)
+    await log_coin_tx(user_id, amount, reason)
 
 
 async def add_money(user_id: int, amount: int) -> None:
@@ -1285,7 +1297,7 @@ async def damage_boss(chat_id: int, user_id: int, dmg: int) -> tuple[int, bool]:
     async with _connect() as conn:
         cur = await conn.execute("SELECT current_hp FROM bosses WHERE chat_id = ?", (chat_id,))
         row = await cur.fetchone()
-        if not row:
+        if not row or row[0] <= 0:
             return 0, False
         cur_hp = max(0, row[0] - dmg)
         await conn.execute("UPDATE bosses SET current_hp = ? WHERE chat_id = ?", (cur_hp, chat_id))

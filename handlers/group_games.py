@@ -171,7 +171,7 @@ async def execute_boss_strike(cb: CallbackQuery, is_nitro: bool = False):
         if p["energy"] < energy_cost:
             return await cb.answer(
                 f"⚡ Нужно {energy_cost} энергии! У тебя сейчас {p['energy']}⚡.\n"
-                f"Энергия восстанавливается каждые 30 мин или мгновенно в магазине.",
+                f"Энергия пополняется бесплатно (+1 каждые 30 мин) или в /shop за 60 🪙.",
                 show_alert=True
             )
 
@@ -212,39 +212,62 @@ async def execute_boss_strike(cb: CallbackQuery, is_nitro: bool = False):
             await cb.answer(f"{strike_type}: -{fmt(base_dmg)} HP! (Осталось: {fmt(cur_hp)} HP){crit_alert}", show_alert=False)
 
         if dead:
-            # 1. Сначала считываем участников рейда, затем очищаем запись о боссе
+            # 1. Считываем участников рейда перед удалением босса
             damagers = await db.get_boss_damagers(chat_id)
+            if not damagers:
+                damagers = [{"user_id": uid, "first_name": cb.from_user.first_name, "damage": base_dmg}]
+
             await db.delete_boss(chat_id)
             await db.set_cooldown(f"boss:{chat_id}", time.time())
+
+            # Определяем призовой фонд побежденного босса
+            boss_info = next(
+                (b for b in data.BOSS_ROSTER if b.get("name") == boss.get("boss_name") or b.get("car_key") == boss.get("boss_car")),
+                None
+            )
+            total_pool = boss_info["coins_pool"] if boss_info else 500
+            total_xp_pool = max(2500, int(total_pool * 5))
+            total_damage = sum(d["damage"] for d in damagers) or 1
+
+            boost = await db.get_chat_boost(chat_id)
+            boost_mult = 2 if boost else 1
+            boost_note = f"\n\n🔥 <b>Применён Буст чата x2! Награды удвоены спонсором {boost['sponsor_name']}!</b>" if boost else ""
+
+            # Справедливое распределение призового фонда босса по доле урона!
+            # Начисление НАПРЯМУЮ через add_coins (без дневных урезаний soft-cap!)
+            user_rewards = {}
+            for i, d in enumerate(damagers):
+                target_uid = d["user_id"]
+                dmg_share = d["damage"] / total_damage
+
+                if len(damagers) == 1:
+                    c_reward = total_pool
+                    x_reward = total_xp_pool
+                elif i == 0:
+                    # 1 место: минимум 35% призового фонда или пропорционально урону
+                    c_reward = max(int(total_pool * 0.35), int(total_pool * dmg_share))
+                    x_reward = max(1200, int(total_xp_pool * dmg_share))
+                elif i < 3:
+                    c_reward = max(25, int(total_pool * dmg_share))
+                    x_reward = max(600, int(total_xp_pool * dmg_share))
+                else:
+                    c_reward = max(15, int(total_pool * dmg_share))
+                    x_reward = max(250, int(total_xp_pool * dmg_share))
+
+                c_reward *= boost_mult
+                x_reward *= boost_mult
+
+                user_rewards[target_uid] = {"coins": c_reward, "xp": x_reward}
+                await db.add_coins(target_uid, c_reward, reason=f"Победа над боссом {boss['boss_name']}")
+                await db.add_xp(target_uid, x_reward)
+
             medals = ["🥇", "🥈", "🥉"]
             lines = []
             for i, d in enumerate(damagers[:8]):
                 m = medals[i] if i < 3 else f"{i + 1}."
                 safe_name = html.escape(d.get("first_name") or "Гонщик")
-                lines.append(f"{m} <b>{safe_name}</b> — <b>{fmt(d['damage'])}</b> HP")
-
-            # Щедрые награды по местам (сбалансировано)
-            boost = await db.get_chat_boost(chat_id)
-            boost_mult = 2 if boost else 1
-            boost_note = f"\n\n🔥 <b>Применён Буст чата x2! Награды удвоены спонсором {boost['sponsor_name']}!</b>" if boost else ""
-
-            for i, d in enumerate(damagers):
-                target_uid = d["user_id"]
-                if i == 0:
-                    coins = 35
-                    xp = 1200
-                elif i < 3:
-                    coins = 20
-                    xp = 700
-                elif i < 10:
-                    coins = 12
-                    xp = 350
-                else:
-                    coins = 6
-                    xp = 150
-
-                await db.grant_coins(target_uid, coins * boost_mult, reason=f"Победа над боссом {boss['boss_name']}")
-                await db.add_xp(target_uid, xp * boost_mult)
+                rew = user_rewards.get(d["user_id"], {"coins": 0, "xp": 0})
+                lines.append(f"{m} <b>{safe_name}</b> — <b>{fmt(d['damage'])}</b> HP (+{fmt(rew['coins'])} 🪙, +{fmt(rew['xp'])} XP)")
 
             # Редактируем старое сообщение босса, убирая кнопки
             try:
@@ -252,7 +275,7 @@ async def execute_boss_strike(cb: CallbackQuery, is_nitro: bool = False):
                 await cb.message.edit_text(
                     f"🏆 <b>БОСС «{boss['boss_name']}» ПОЛНОСТЬЮ УНИЧТОЖЕН!</b>\n\n"
                     f"💀 Победный таран нанёс: <b>{killer_name}</b>!\n"
-                    f"🎉 Чат одержал сокрушительную победу, награды начислены!",
+                    f"🎉 Призовой фонд <b>{fmt(total_pool * boost_mult)} 🪙 монет</b> распределён между героями битвы!",
                     reply_markup=None
                 )
             except Exception:
@@ -261,8 +284,8 @@ async def execute_boss_strike(cb: CallbackQuery, is_nitro: bool = False):
             gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
             await cb.message.answer(
                 f"{gif_tag}🏆 <b>БОСС «{boss['boss_name']}» ПОЛНОСТЬЮ УНИЧТОЖЕН!</b>\n\n"
-                f"🎉 Чат одержал сокрушительную победу! Все участники битвы получили награды (монеты 🪙 и опыт XP).{boost_note}\n\n"
-                f"👑 <b>ГЕРОИ БИТВЫ (ТОП ПО УРОНУ):</b>\n" + ("\n".join(lines) if lines else "—")
+                f"🎉 Чат одержал сокрушительную победу! Призовой фонд <b>{fmt(total_pool * boost_mult)} 🪙 монет</b> распределён между всеми участниками битвы по нанесённому урону!{boost_note}\n\n"
+                f"👑 <b>ГЕРОИ БИТВЫ И ПОЛУЧЕННЫЕ НАГРАДЫ:</b>\n" + ("\n".join(lines) if lines else "—")
             )
         else:
             # Обновляем сообщение босса в чате
