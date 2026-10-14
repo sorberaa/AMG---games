@@ -636,6 +636,29 @@ async def init_db() -> None:
                     await conn.execute("ALTER TABLE player_cars ADD COLUMN IF NOT EXISTS plate TEXT DEFAULT NULL")
                 except Exception:
                     pass
+
+                # Миграция типов столбцов на BIGINT для поддержки 64-битных Telegram ID (группы и новые юзеры)
+                for alter_sql in [
+                    "ALTER TABLE bosses ALTER COLUMN chat_id TYPE BIGINT",
+                    "ALTER TABLE boss_damage ALTER COLUMN chat_id TYPE BIGINT",
+                    "ALTER TABLE boss_damage ALTER COLUMN user_id TYPE BIGINT",
+                    "ALTER TABLE players ALTER COLUMN user_id TYPE BIGINT",
+                    "ALTER TABLE player_cars ALTER COLUMN user_id TYPE BIGINT",
+                    "ALTER TABLE achievements ALTER COLUMN user_id TYPE BIGINT",
+                    "ALTER TABLE chat_boosts ALTER COLUMN chat_id TYPE BIGINT",
+                    "ALTER TABLE chat_boosts ALTER COLUMN sponsor_id TYPE BIGINT",
+                    "ALTER TABLE coin_transactions ALTER COLUMN user_id TYPE BIGINT",
+                    "ALTER TABLE races ALTER COLUMN challenger_id TYPE BIGINT",
+                    "ALTER TABLE races ALTER COLUMN opponent_id TYPE BIGINT",
+                    "ALTER TABLE races ALTER COLUMN winner_id TYPE BIGINT",
+                    "ALTER TABLE withdrawals ALTER COLUMN user_id TYPE BIGINT",
+                    "ALTER TABLE stars_transactions ALTER COLUMN user_id TYPE BIGINT",
+                ]:
+                    try:
+                        await conn.execute(alter_sql)
+                    except Exception as err:
+                        logger.debug(f"PG column alter notice ({alter_sql}): {err}")
+
                 cnt = await conn.fetchval("SELECT COUNT(*) FROM players")
                 if cnt == 0 and os.path.exists(DATABASE_PATH):
                     await migrate_sqlite_to_pg(DATABASE_PATH)
@@ -1259,19 +1282,19 @@ async def create_boss(chat_id: int, boss_name: str, boss_car: str, max_hp: int) 
 
 async def damage_boss(chat_id: int, user_id: int, dmg: int) -> tuple[int, bool]:
     """Наносит урон боссу. Возвращает (остаток_hp, повержен_ли)."""
-    async with _connect() as db:
-        cur = await db.execute("SELECT current_hp FROM bosses WHERE chat_id = ?", (chat_id,))
+    async with _connect() as conn:
+        cur = await conn.execute("SELECT current_hp FROM bosses WHERE chat_id = ?", (chat_id,))
         row = await cur.fetchone()
         if not row:
             return 0, False
         cur_hp = max(0, row[0] - dmg)
-        await db.execute("UPDATE bosses SET current_hp = ? WHERE chat_id = ?", (cur_hp, chat_id))
-        await db.execute(
+        await conn.execute("UPDATE bosses SET current_hp = ? WHERE chat_id = ?", (cur_hp, chat_id))
+        await conn.execute(
             "INSERT INTO boss_damage (chat_id, user_id, damage) VALUES (?, ?, ?) "
-            "ON CONFLICT(chat_id, user_id) DO UPDATE SET damage = damage + ?",
-            (chat_id, user_id, dmg, dmg)
+            "ON CONFLICT(chat_id, user_id) DO UPDATE SET damage = boss_damage.damage + EXCLUDED.damage",
+            (chat_id, user_id, dmg)
         )
-        await db.commit()
+        await conn.commit()
         return cur_hp, cur_hp == 0
 
 

@@ -175,10 +175,6 @@ async def execute_boss_strike(cb: CallbackQuery, is_nitro: bool = False):
                 show_alert=True
             )
 
-        # Списываем энергию
-        for _ in range(energy_cost):
-            await db.use_energy(uid)
-
         car = CAR_CATALOG.get(pc["car_key"], CAR_CATALOG["c180"])
         st = calc_stats(car, car_upgrades(pc))
 
@@ -202,6 +198,10 @@ async def execute_boss_strike(cb: CallbackQuery, is_nitro: bool = False):
 
         cur_hp, dead = await db.damage_boss(chat_id, uid, base_dmg)
 
+        # Списываем энергию только при успешном нанесении урона
+        for _ in range(energy_cost):
+            await db.use_energy(uid)
+
         crit_alert = " 💥 КРИТ!" if is_crit else ""
         strike_type = "🔥 НИТРО" if is_nitro else "💥 ТАРАН"
 
@@ -212,11 +212,10 @@ async def execute_boss_strike(cb: CallbackQuery, is_nitro: bool = False):
             await cb.answer(f"{strike_type}: -{fmt(base_dmg)} HP! (Осталось: {fmt(cur_hp)} HP){crit_alert}", show_alert=False)
 
         if dead:
-            # 1. Первым делом удаляем босса, чтобы параллельные клики не сбоили
+            # 1. Сначала считываем участников рейда, затем очищаем запись о боссе
+            damagers = await db.get_boss_damagers(chat_id)
             await db.delete_boss(chat_id)
             await db.set_cooldown(f"boss:{chat_id}", time.time())
-
-            damagers = await db.get_boss_damagers(chat_id)
             medals = ["🥇", "🥈", "🥉"]
             lines = []
             for i, d in enumerate(damagers[:8]):
