@@ -1,5 +1,6 @@
 import html
 import logging
+from datetime import datetime, timedelta
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -8,7 +9,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton as Btn, InlineKeyb
 
 import db
 from config import ADMIN_IDS, SUPER_ADMINS
-from data import CAR_CATALOG, fmt
+from data import CAR_CATALOG, fmt, xp_for_level
 from utils import is_admin, safe_edit, set_admin_cache
 
 logger = logging.getLogger("amg.admin")
@@ -23,6 +24,7 @@ class Adm(StatesGroup):
     broadcast = State()
     add_admin = State()
     remove_admin = State()
+    msg_user = State()
 
 
 # ── Клавиатуры ───────────────────────────────────────────────
@@ -31,7 +33,7 @@ def main_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [Btn(text="⭐ Вывод звёзд (TON / Валюта)", callback_data="adm:stars_withdraw")],
         [Btn(text="📊 Статистика", callback_data="adm:stats"), Btn(text="🪙 Приход/Уход монет", callback_data="adm:coin_flow")],
-        [Btn(text="👥 Игроки", callback_data="adm:players:0"), Btn(text="🔎 Найти игрока", callback_data="adm:find")],
+        [Btn(text="👥 Участники (Игроки)", callback_data="adm:players:0"), Btn(text="🔎 Найти игрока", callback_data="adm:find")],
         [Btn(text="👑 Список админов", callback_data="adm:admins"), Btn(text="📢 Рассылка", callback_data="adm:broadcast")],
         [Btn(text="💾 База данных", callback_data="adm:db_info"), Btn(text="👾 Рейдовые боссы", callback_data="adm:bosses")],
         [Btn(text="✖️ Закрыть", callback_data="adm:close")],
@@ -40,22 +42,89 @@ def main_kb() -> InlineKeyboardMarkup:
 
 
 
-def back_kb(cb: str = "adm:main") -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[Btn(text="◀️ Назад", callback_data=cb)]])
+def back_kb(cb: str = "adm:main", text: str = "◀️ Назад") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[Btn(text=text, callback_data=cb)]])
 
 
 def player_kb(uid: int, p: dict) -> InlineKeyboardMarkup:
     adm = "👤 Снять админку" if p.get("is_admin") else "👑 Дать админку"
     ban = "✅ Разбанить" if p.get("is_banned") else "🚫 Забанить"
     return InlineKeyboardMarkup(inline_keyboard=[
-        [Btn(text="🪙 +Монеты", callback_data=f"adm:act:coins_add:{uid}"),
-         Btn(text="🪙 −Монеты", callback_data=f"adm:act:coins_sub:{uid}")],
-        [Btn(text="🚗 Выдать авто", callback_data=f"adm:act:car:{uid}"),
-         Btn(text="📈 Уровень", callback_data=f"adm:act:level:{uid}")],
-        [Btn(text="⚡ Заполнить энергию", callback_data=f"adm:energy:{uid}")],
+        [Btn(text="🪙 Монеты (Баланс)", callback_data=f"adm:menu_c:{uid}"),
+         Btn(text="📈 Уровень & XP", callback_data=f"adm:menu_lvl:{uid}")],
+        [Btn(text="🚗 Выдать авто", callback_data=f"adm:menu_cars:{uid}"),
+         Btn(text="🛠 MAX Тюнинг авто", callback_data=f"adm:full_tune:{uid}")],
+        [Btn(text="⚡ Заполнить энергию", callback_data=f"adm:energy:{uid}"),
+         Btn(text="👑 VIP & Привилегии", callback_data=f"adm:menu_vip:{uid}")],
+        [Btn(text="🔄 Сбросить КД / лимиты", callback_data=f"adm:reset_cd:{uid}"),
+         Btn(text="✉️ Написать в ЛС", callback_data=f"adm:msg_user:{uid}")],
         [Btn(text=adm, callback_data=f"adm:toggle_admin:{uid}"),
          Btn(text=ban, callback_data=f"adm:toggle_ban:{uid}")],
-        [Btn(text="🔄 Обновить", callback_data=f"adm:p:{uid}"), Btn(text="◀️ К списку", callback_data="adm:players:0")],
+        [Btn(text="🔄 Обновить", callback_data=f"adm:p:{uid}"),
+         Btn(text="👥 К списку участников", callback_data="adm:players:0")],
+    ])
+
+
+def player_coins_kb(uid: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="➕ 100 🪙", callback_data=f"adm:give_c:{uid}:100"),
+         Btn(text="➕ 500 🪙", callback_data=f"adm:give_c:{uid}:500"),
+         Btn(text="➕ 1 000 🪙", callback_data=f"adm:give_c:{uid}:1000")],
+        [Btn(text="➕ 5 000 🪙", callback_data=f"adm:give_c:{uid}:5000"),
+         Btn(text="➕ 10 000 🪙", callback_data=f"adm:give_c:{uid}:10000"),
+         Btn(text="➕ 50 000 🪙", callback_data=f"adm:give_c:{uid}:50000")],
+        [Btn(text="➖ 500 🪙", callback_data=f"adm:give_c:{uid}:-500"),
+         Btn(text="➖ 2 000 🪙", callback_data=f"adm:give_c:{uid}:-2000"),
+         Btn(text="0️⃣ Обнулить", callback_data=f"adm:set_c_zero:{uid}")],
+        [Btn(text="✏️ Ввести свою сумму текстом", callback_data=f"adm:act:coins_add:{uid}")],
+        [Btn(text="◀️ Назад к игроку", callback_data=f"adm:p:{uid}")]
+    ])
+
+
+def player_lvl_kb(uid: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="➕ 1 Уровень", callback_data=f"adm:add_lvl:{uid}:1"),
+         Btn(text="➕ 5 Уровней", callback_data=f"adm:add_lvl:{uid}:5"),
+         Btn(text="➕ 10 Уровней", callback_data=f"adm:add_lvl:{uid}:10")],
+        [Btn(text="🎯 Ур. 10", callback_data=f"adm:set_lvl:{uid}:10"),
+         Btn(text="🎯 Ур. 25", callback_data=f"adm:set_lvl:{uid}:25"),
+         Btn(text="🎯 Ур. 50", callback_data=f"adm:set_lvl:{uid}:50"),
+         Btn(text="👑 Ур. 100", callback_data=f"adm:set_lvl:{uid}:100")],
+        [Btn(text="📈 +1 000 XP", callback_data=f"adm:add_xp:{uid}:1000"),
+         Btn(text="📈 +5 000 XP", callback_data=f"adm:add_xp:{uid}:5000")],
+        [Btn(text="✏️ Задать уровень числом", callback_data=f"adm:act:level:{uid}")],
+        [Btn(text="◀️ Назад к игроку", callback_data=f"adm:p:{uid}")]
+    ])
+
+
+def player_cars_kb(uid: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="👑 AMG ONE (1063 л.с. · SS)", callback_data=f"adm:give_car_key:{uid}:amg_one")],
+        [Btn(text="💎 GT Black Series (730 л.с. · SS)", callback_data=f"adm:give_car_key:{uid}:gt_bs")],
+        [Btn(text="💎 GT R PRO (585 л.с.)", callback_data=f"adm:give_car_key:{uid}:gtr_pro"),
+         Btn(text="⚡ GT 63 S E (843 л.с.)", callback_data=f"adm:give_car_key:{uid}:gt63se")],
+        [Btn(text="🏎 E 63 S (612 л.с. · A)", callback_data=f"adm:give_car_key:{uid}:e63s"),
+         Btn(text="🚙 G 63 Гелик (585 л.с. · B)", callback_data=f"adm:give_car_key:{uid}:g63")],
+        [Btn(text="🏎 C 63 S (510 л.с. · B)", callback_data=f"adm:give_car_key:{uid}:c63"),
+         Btn(text="🏎 CLA 45 S (421 л.с. · C)", callback_data=f"adm:give_car_key:{uid}:cla45")],
+        [Btn(text="🚗 A 35 AMG (306 л.с. · D)", callback_data=f"adm:give_car_key:{uid}:a35"),
+         Btn(text="🚙 GLE 63 S (612 л.с. · A)", callback_data=f"adm:give_car_key:{uid}:gle63s")],
+        [Btn(text="✏️ Ввести любой другой ключ авто", callback_data=f"adm:act:car:{uid}")],
+        [Btn(text="◀️ Назад к игроку", callback_data=f"adm:p:{uid}")]
+    ])
+
+
+def player_vip_kb(uid: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="👑 VIP на 7 дней", callback_data=f"adm:give_vip:{uid}:7"),
+         Btn(text="👑 VIP на 30 дней", callback_data=f"adm:give_vip:{uid}:30")],
+        [Btn(text="✨ Золотой винил (вкл/выкл)", callback_data=f"adm:toggle_wrap:{uid}"),
+         Btn(text="🛡 Страховка AMG (+1)", callback_data=f"adm:give_ins:{uid}")],
+        [Btn(text="🎰 +3 спина Колеса", callback_data=f"adm:give_spins:{uid}:3"),
+         Btn(text="🏷 +1 Блатной госномер", callback_data=f"adm:give_plate:{uid}:1")],
+        [Btn(text="🔋 +1 к макс. энергии", callback_data=f"adm:give_max_e:{uid}:1"),
+         Btn(text="⚡ Нитро-буст чата (24ч)", callback_data=f"adm:give_chat_nitro:{uid}")],
+        [Btn(text="◀️ Назад к игроку", callback_data=f"adm:p:{uid}")]
     ])
 
 
@@ -416,7 +485,201 @@ async def adm_router(cb: CallbackQuery, state: FSMContext, player: dict = None):
             p = await db.get_player(target_uid)
             if p:
                 await db.update_player(target_uid, energy=p["max_energy"])
+                try:
+                    await cb.answer(f"⚡ Энергия игрока {p['first_name']} восстановлена до максимума ({p['max_energy']})!", show_alert=True)
+                except Exception:
+                    pass
             await show_player(cb, target_uid)
+        elif action == "menu_c":
+            await show_player_coins_menu(cb, int(parts[2]))
+        elif action == "give_c":
+            target_uid = int(parts[2])
+            amt = int(parts[3])
+            await db.add_coins_admin(target_uid, amt, reason="Админ-панель")
+            sign = "+" if amt > 0 else ""
+            try:
+                await cb.answer(f"🪙 Баланс изменен: {sign}{amt} монет!", show_alert=True)
+            except Exception:
+                pass
+            await show_player_coins_menu(cb, target_uid)
+        elif action == "set_c_zero":
+            target_uid = int(parts[2])
+            await db.update_player(target_uid, coins=0, money=0)
+            try:
+                await cb.answer("0️⃣ Баланс игрока обнулен (0 🪙)!", show_alert=True)
+            except Exception:
+                pass
+            await show_player_coins_menu(cb, target_uid)
+        elif action == "menu_lvl":
+            await show_player_lvl_menu(cb, int(parts[2]))
+        elif action == "add_lvl":
+            target_uid = int(parts[2])
+            delta = int(parts[3])
+            p = await db.get_player(target_uid)
+            if p:
+                new_lvl = min(100, p["level"] + delta)
+                await db.update_player(target_uid, level=new_lvl)
+                try:
+                    await cb.answer(f"🆙 Уровень изменен: +{delta} ➔ {new_lvl} ур.!", show_alert=True)
+                except Exception:
+                    pass
+            await show_player_lvl_menu(cb, target_uid)
+        elif action == "set_lvl":
+            target_uid = int(parts[2])
+            new_lvl = int(parts[3])
+            await db.update_player(target_uid, level=new_lvl, xp=0)
+            try:
+                await cb.answer(f"🎯 Установлен {new_lvl} уровень!", show_alert=True)
+            except Exception:
+                pass
+            await show_player_lvl_menu(cb, target_uid)
+        elif action == "add_xp":
+            target_uid = int(parts[2])
+            xp_amt = int(parts[3])
+            await db.add_xp(target_uid, xp_amt)
+            try:
+                await cb.answer(f"📈 Начислено +{xp_amt} XP!", show_alert=True)
+            except Exception:
+                pass
+            await show_player_lvl_menu(cb, target_uid)
+        elif action == "menu_cars":
+            await show_player_cars_menu(cb, int(parts[2]))
+        elif action == "give_car_key":
+            target_uid = int(parts[2])
+            car_key = parts[3]
+            await db.add_car(target_uid, car_key)
+            car_name = CAR_CATALOG.get(car_key, {}).get("name", car_key)
+            try:
+                await cb.answer(f"🚗 Выдан автомобиль: {car_name}!", show_alert=True)
+            except Exception:
+                pass
+            await show_player_cars_menu(cb, target_uid)
+        elif action == "full_tune":
+            target_uid = int(parts[2])
+            car = await db.get_selected_car(target_uid)
+            if not car:
+                cars = await db.get_player_cars(target_uid)
+                car = cars[0] if cars else None
+            if not car:
+                try:
+                    await cb.answer("❌ У игрока нет авто в гараже! Сначала выдайте машину.", show_alert=True)
+                except Exception:
+                    pass
+                return await show_player(cb, target_uid)
+            for part in db.UPGRADE_COLUMNS:
+                await db.upgrade_car(car["id"], part, 5)
+            car_name = CAR_CATALOG.get(car["car_key"], {}).get("name", "Авто")
+            try:
+                await cb.answer(f"🚀 Все 13 узлов тюнинга для {car_name} прокачаны до MAX (5 ур.)!", show_alert=True)
+            except Exception:
+                pass
+            await show_player(cb, target_uid)
+        elif action == "menu_vip":
+            await show_player_vip_menu(cb, int(parts[2]))
+        elif action == "give_vip":
+            target_uid = int(parts[2])
+            days = int(parts[3])
+            await db.add_vip(target_uid, days)
+            try:
+                await cb.answer(f"👑 VIP статус выдан на {days} дней!", show_alert=True)
+            except Exception:
+                pass
+            await show_player_vip_menu(cb, target_uid)
+        elif action == "toggle_wrap":
+            target_uid = int(parts[2])
+            p = await db.get_player(target_uid)
+            if p:
+                new_wrap = 0 if p.get("gold_wrap") else 1
+                await db.update_player(target_uid, gold_wrap=new_wrap)
+                status_str = "включен" if new_wrap else "отключен"
+                try:
+                    await cb.answer(f"✨ Золотой винил {status_str}!", show_alert=True)
+                except Exception:
+                    pass
+            await show_player_vip_menu(cb, target_uid)
+        elif action == "give_ins":
+            target_uid = int(parts[2])
+            await db.update_player(target_uid, has_insurance=1)
+            try:
+                await cb.answer("🛡 Страховка AMG активирована!", show_alert=True)
+            except Exception:
+                pass
+            await show_player_vip_menu(cb, target_uid)
+        elif action == "give_spins":
+            target_uid = int(parts[2])
+            spins = int(parts[3])
+            await db.increment(target_uid, extra_spins=spins)
+            try:
+                await cb.answer(f"🎰 Выдано +{spins} спинов Колеса Фортуны!", show_alert=True)
+            except Exception:
+                pass
+            await show_player_vip_menu(cb, target_uid)
+        elif action == "give_plate":
+            target_uid = int(parts[2])
+            plates = int(parts[3])
+            await db.increment(target_uid, custom_plates=plates)
+            try:
+                await cb.answer(f"🏷 Выдано +{plates} блатных госномеров!", show_alert=True)
+            except Exception:
+                pass
+            await show_player_vip_menu(cb, target_uid)
+        elif action == "give_max_e":
+            target_uid = int(parts[2])
+            e = int(parts[3])
+            await db.increment(target_uid, max_energy=e, energy=e)
+            try:
+                await cb.answer(f"🔋 Макс. энергия увеличена на +{e}!", show_alert=True)
+            except Exception:
+                pass
+            await show_player_vip_menu(cb, target_uid)
+        elif action == "give_chat_nitro":
+            target_uid = int(parts[2])
+            now = datetime.utcnow()
+            nitro_until = (now + timedelta(hours=24)).strftime(db.TS_FMT)
+            await db.update_player(target_uid, chat_nitro_until=nitro_until)
+            try:
+                await cb.answer("⚡ Нитро-буст чата выдан на 24 часа!", show_alert=True)
+            except Exception:
+                pass
+            await show_player_vip_menu(cb, target_uid)
+        elif action == "reset_cd":
+            target_uid = int(parts[2])
+            p = await db.get_player(target_uid)
+            if p:
+                await db.update_player(
+                    target_uid,
+                    coins_today=0,
+                    coins_date=None,
+                    last_daily=None,
+                    last_wheel_spin=None,
+                    last_coin_duel=None,
+                    easy_races_today=0,
+                    easy_races_date=None,
+                    last_adventure=None,
+                    energy=p["max_energy"],
+                )
+                try:
+                    await cb.answer(f"🔄 Все кулдауны и лимиты для {p['first_name']} сброшены!", show_alert=True)
+                except Exception:
+                    pass
+            await show_player(cb, target_uid)
+        elif action == "msg_user":
+            target_uid = int(parts[2])
+            p = await db.get_player(target_uid)
+            if not p:
+                try:
+                    return await cb.answer("Игрок не найден!", show_alert=True)
+                except Exception:
+                    return
+            await state.update_data(target_uid=target_uid, target_name=p.get("first_name", "Гонщик"))
+            await state.set_state(Adm.msg_user)
+            await safe_edit(
+                cb,
+                f"✉️ <b>Личное сообщение игроку {html.escape(p.get('first_name') or 'Гонщик')}</b>\n\n"
+                f"Отправь текст сообщения, которое бот передаст игроку в ЛС от имени администрации:\n\n"
+                f"<i>Для отмены напиши /admin</i>",
+                back_kb(f"adm:p:{target_uid}")
+            )
         elif action == "toggle_admin":
             await toggle_admin(cb, int(parts[2]))
         elif action == "remove_admin":
@@ -604,6 +867,80 @@ async def show_player(cb: CallbackQuery, uid: int):
     if not p:
         return await safe_edit(cb, "❌ Игрок не найден", back_kb())
     await safe_edit(cb, player_card(p, await db.get_player_cars(uid)), player_kb(uid, p))
+
+
+async def show_player_coins_menu(cb: CallbackQuery, uid: int):
+    p = await db.get_player(uid)
+    if not p:
+        return await safe_edit(cb, "❌ Игрок не найден", back_kb())
+    text = (
+        f"🪙 <b>Управление монетами игрока:</b>\n"
+        f"👤 <b>{html.escape(p.get('first_name') or 'Гонщик')}</b> (@{html.escape(p.get('username') or '—')})\n"
+        f"🆔 ID: <code>{uid}</code>\n\n"
+        f"💰 Текущий баланс: <b>{fmt(p['coins'])} 🪙</b>\n"
+        f"📅 Заработано сегодня: <b>{p['coins_today'] if p['coins_date'] else 0} 🪙</b>\n\n"
+        f"<i>Нажми кнопку для мгновенного начисления или списания:</i>"
+    )
+    await safe_edit(cb, text, player_coins_kb(uid))
+
+
+async def show_player_lvl_menu(cb: CallbackQuery, uid: int):
+    p = await db.get_player(uid)
+    if not p:
+        return await safe_edit(cb, "❌ Игрок не найден", back_kb())
+    req_xp = xp_for_level(p['level'])
+    text = (
+        f"📈 <b>Управление уровнем и XP игрока:</b>\n"
+        f"👤 <b>{html.escape(p.get('first_name') or 'Гонщик')}</b> (@{html.escape(p.get('username') or '—')})\n"
+        f"🆔 ID: <code>{uid}</code>\n\n"
+        f"📊 Уровень: <b>{p['level']}</b> (XP: <b>{p['xp']}/{req_xp}</b>)\n\n"
+        f"<i>Выбери действие для мгновенного изменения:</i>"
+    )
+    await safe_edit(cb, text, player_lvl_kb(uid))
+
+
+async def show_player_cars_menu(cb: CallbackQuery, uid: int):
+    p = await db.get_player(uid)
+    if not p:
+        return await safe_edit(cb, "❌ Игрок не найден", back_kb())
+    cars = await db.get_player_cars(uid)
+    car_names = [CAR_CATALOG[c["car_key"]]["name"].replace("Mercedes-AMG ", "") for c in cars if c["car_key"] in CAR_CATALOG]
+    text = (
+        f"🚗 <b>Выдача авто игроку:</b>\n"
+        f"👤 <b>{html.escape(p.get('first_name') or 'Гонщик')}</b> (@{html.escape(p.get('username') or '—')})\n"
+        f"🆔 ID: <code>{uid}</code>\n\n"
+        f"🏎 Уже в гараже ({len(cars)}): {', '.join(car_names) if car_names else 'нет'}\n\n"
+        f"<i>Нажми на модель для моментальной выдачи в гараж игрока:</i>"
+    )
+    await safe_edit(cb, text, player_cars_kb(uid))
+
+
+async def show_player_vip_menu(cb: CallbackQuery, uid: int):
+    p = await db.get_player(uid)
+    if not p:
+        return await safe_edit(cb, "❌ Игрок не найден", back_kb())
+    vip_active = False
+    if p.get("vip_until"):
+        try:
+            vip_active = datetime.strptime(p["vip_until"], db.TS_FMT) > datetime.utcnow()
+        except Exception:
+            pass
+    vip_str = f"✅ До {p['vip_until'][:10]}" if vip_active else "❌ Не активен"
+    wrap_str = "✨ Активен" if p.get("gold_wrap") else "⚪ Нет"
+    ins_str = "🛡 Есть" if p.get("has_insurance") else "⚪ Нет"
+    text = (
+        f"👑 <b>VIP & Привилегии игрока:</b>\n"
+        f"👤 <b>{html.escape(p.get('first_name') or 'Гонщик')}</b> (@{html.escape(p.get('username') or '—')})\n"
+        f"🆔 ID: <code>{uid}</code>\n\n"
+        f"• VIP статус: <b>{vip_str}</b>\n"
+        f"• Золотой винил: <b>{wrap_str}</b>\n"
+        f"• Страховка AMG: <b>{ins_str}</b>\n"
+        f"• Бонусные спины: <b>{p.get('extra_spins', 0)} 🎰</b>\n"
+        f"• Блатные госномера: <b>{p.get('custom_plates', 0)} 🏷</b>\n"
+        f"• Энергия: <b>{p['energy']}/{p['max_energy']} ⚡</b>\n\n"
+        f"<i>Выбери привилегию для выдачи:</i>"
+    )
+    await safe_edit(cb, text, player_vip_kb(uid))
 
 
 async def show_admins(cb: CallbackQuery):
@@ -972,6 +1309,39 @@ async def state_remove_admin(message: Message, state: FSMContext):
             [Btn(text="🏠 В админку", callback_data="adm:main")]
         ])
     )
+
+
+@router.message(Adm.msg_user)
+async def state_msg_user(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        await state.clear()
+        return await message.answer("❌ Нет доступа к админ-панели.")
+
+    data = await state.get_data()
+    target_uid = data.get("target_uid")
+    target_name = data.get("target_name", "Гонщик")
+
+    text = message.html_text if message.text else None
+    if not text:
+        return await message.answer("❌ Нужен текст сообщения. Напишите текст или /admin для отмены.")
+
+    await state.clear()
+    try:
+        await message.bot.send_message(
+            target_uid,
+            f"✉️ <b>Личное сообщение от администрации AMG Racing:</b>\n\n{text}"
+        )
+        await message.answer(
+            f"✅ <b>Сообщение успешно доставлено игроку {html.escape(target_name)}!</b>\n"
+            f"🆔 ID: <code>{target_uid}</code>",
+            reply_markup=card_kb(target_uid)
+        )
+    except Exception as e:
+        await message.answer(
+            f"❌ <b>Не удалось доставить сообщение игроку:</b> {e}\n\n"
+            "<i>(Возможно, пользователь заблокировал бота или не начинал диалог в ЛС)</i>",
+            reply_markup=card_kb(target_uid)
+        )
 
 
 # ── Вывод Звёзд Telegram Stars (Fragment / TON) ───────────────
