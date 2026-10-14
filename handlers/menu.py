@@ -25,7 +25,6 @@ def menu_text(p: dict) -> str:
         f"📊 Уровень <b>{p['level']}</b> · ⭐ Репутация: <b>{p['reputation']}</b>\n"
         f"🪙 Баланс: <b>{fmt(p['coins'])} монет</b>\n"
         f"⚡ Энергия: <b>{p['energy']}/{p['max_energy']}</b>{salt_indicator}{nitro_indicator}\n"
-        f"👑 Автор проекта: <b>A$k</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"{vip_status_line}"
         "Выбери раздел гаража или заезда:"
@@ -35,8 +34,7 @@ def menu_text(p: dict) -> str:
 
 WELCOME = (
     f"<a href='{data.AMG_GIFS['welcome']}'>&#8205;</a>"
-    "🏎 <b>AMG RACING BOT</b> 🏎\n"
-    "👑 <b>Автор и создатель проекта:</b> <b>A$k</b>\n\n"
+    "🏎 <b>AMG RACING BOT</b> 🏎\n\n"
     "Добро пожаловать в мир уличных гонок Mercedes-AMG!\n\n"
     "🏁 <b>ГОНКИ И СОРЕВНОВАНИЯ:</b>\n"
     "• 🏎 Одиночные спринты за подарками прямо в боте (/race)\n"
@@ -48,14 +46,12 @@ WELCOME = (
     "🧰 Открывай сундуки с ценным лутом (/cases)\n"
     "🪙 Зарабатывай монеты и обменивай призы (/cshop)\n\n"
     "🪙 Стартовый капитал: <b>500 монет</b>\n"
-    "🚗 Первая машина: <b>Mercedes C180</b>\n\n"
-    "👑 <i>Создатель и разработчик игры:</i> <b>A$k</b>"
+    "🚗 Первая машина: <b>Mercedes C180</b>"
 )
 
 
 HELP = (
-    "❓ <b>Правила и Режимы AMG Racing</b>\n"
-    "👑 <b>Создатель игры:</b> <b>A$k</b>\n\n"
+    "❓ <b>Правила и Режимы AMG Racing</b>\n\n"
     "👥 <b>КОМАНДНЫЙ РЕЖИМ (в группах чата):</b>\n"
     "Все игры и соревнования проходят только в группах!\n"
     "• 🏁 /race — уличные гонки с динамическими обгонами\n"
@@ -77,18 +73,7 @@ HELP = (
     "• /cases — открытие сундуков и кейсов AMG\n"
     "• /cshop — магазин бонусов и сундуков\n"
     "• /daily — ежедневный подарок\n"
-    "• /profile — статистика и достижения\n"
-    "• /author — информация об авторе (A$k)\n\n"
-    "👑 <b>Основатель и владелец проекта:</b> <b>A$k</b>"
-)
-
-AUTHOR_TEXT = (
-    f"<a href='{data.AMG_GIFS['welcome']}'>&#8205;</a>"
-    "👑 <b>АВТОР И СОЗДАТЕЛЬ ПРОЕКТА AMG RACING</b> 👑\n\n"
-    "🏎 <b>AMG Racing Bot</b> полностью придуман, создан и запущен под авторством:\n"
-    "👉 <b>A$k</b> — идейный вдохновитель, основатель и создатель игры!\n\n"
-    "🏆 Все механики уличных гонок, тюнинга Mercedes-AMG, рейдов на боссов, дуэлей и Stars-экономики созданы автором <b>A$k</b>.\n\n"
-    "💬 <i>По вопросам сотрудничества, рекламы и предложений обращайтесь к автору проекта: <b>A$k</b>!</i>"
+    "• /profile — статистика и достижения"
 )
 
 
@@ -142,17 +127,6 @@ async def cmd_menu(message: Message, player: dict):
 @router.message(Command("help"))
 async def cmd_help(message: Message):
     await message.answer(HELP)
-
-
-@router.message(Command("author", "creator", "about"))
-async def cmd_author(message: Message):
-    await message.answer(AUTHOR_TEXT, reply_markup=back_kb("menu", "🏠 В главное меню"))
-
-
-@router.callback_query(F.data == "author_info")
-async def cb_author_info(cb: CallbackQuery):
-    await cb.answer()
-    await safe_edit(cb, AUTHOR_TEXT, back_kb("menu", "🏠 В главное меню"))
 
 
 @router.callback_query(F.data == "menu")

@@ -32,11 +32,10 @@ def main_menu_kb() -> InlineKeyboardMarkup:
         ("👤 Профиль", "profile"),
         ("🏆 Топ игроков", "top:wins"),
         ("👥 Командный режим", "group_info"),
-        ("❓ Помощь", "help"),
-        ("👑 Автор проекта (A$k)", "author_info")
+        ("❓ Помощь", "help")
     ]:
         b.button(text=text, callback_data=cb)
-    b.adjust(1, 1, 1, 2, 2, 2, 2, 2, 1)
+    b.adjust(1, 1, 1, 2, 2, 2, 2, 2)
     return b.as_markup()
 
 

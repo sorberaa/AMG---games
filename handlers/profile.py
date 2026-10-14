@@ -23,19 +23,13 @@ async def profile_text(uid: int) -> str:
     need = xp_for_level(p["level"])
     bar_len = int(p["xp"] / need * 10) if need else 0
     bar = "▰" * bar_len + "▱" * (10 - bar_len)
-    if uid == 8936384717 or p.get("user_id") == 8936384717:
-        role_badge = " · 👑 <b>Создатель A$k</b>"
-    elif db.is_vip(p):
-        role_badge = " · 👑 <b>VIP-Гонщик</b>"
-    else:
-        role_badge = ""
-
+    vip_badge = " · 👑 <b>VIP-Гонщик</b>" if db.is_vip(p) else ""
     nitro_t = " · 🔥 <i>Нитро-буст</i>" if db.is_nitro_boosted(p) else ""
     ins_t = "🛡 Страховка: <b>Активна</b>" if p.get("has_insurance") else "🛡 Страховка: <i>Нет</i>"
     wrap_t = " · ✨ <i>Золотой винил</i>" if p.get("gold_wrap") else ""
 
     vip_promo = ""
-    if not db.is_vip(p) and uid != 8936384717:
+    if not db.is_vip(p):
         vip_promo = (
             "\n\n━━━━━━━━━━━━━━━━━━━━\n"
             "👑 <b>СТАТУС VIP-ГОНЩИКА AMG</b>\n"
@@ -45,10 +39,8 @@ async def profile_text(uid: int) -> str:
             "👉 <i>Доступен в магазине Stars от 79 ⭐️</i>"
         )
 
-    author_footer = "\n\n👑 <i>Автор проекта:</i> <b>A$k</b>"
-
     return (
-        f"👤 <b>{p['first_name']}</b>{role_badge}\n\n"
+        f"👤 <b>{p['first_name']}</b>{vip_badge}\n\n"
         f"📊 Уровень <b>{p['level']}</b>\n{bar} {p['xp']}/{need} XP\n\n"
         f"🪙 Баланс: <b>{fmt(p['coins'])} монет</b>\n"
         f"{ins_t}{wrap_t}{nitro_t}\n\n"
@@ -58,7 +50,6 @@ async def profile_text(uid: int) -> str:
         f"📈 Винрейт: {wr}% · ⚔️ PvP-побед: {p['pvp_wins']}\n"
         f"🚗 Машин: {len(cars)} · Основная: {CAR_CATALOG[pc['car_key']]['name'] if pc else '—'}\n"
         f"🔥 Стрик: {p['daily_streak']} дн. · 🏅 Достижений: {len(ach)}/{len(ACHIEVEMENTS_DEF)}"
-        f"{author_footer}"
         f"{vip_promo}"
     )
 
