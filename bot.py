@@ -1,4 +1,4 @@
-"""AMG Racing — Telegram мини-RPG. Точка входа."""
+﻿"""AMG Racing — Telegram мини-RPG. Точка входа."""
 import asyncio
 import logging
 
@@ -94,7 +94,6 @@ async def main():
 
         BotCommand(command="duel", description="⚔️ Дуэль [ставка/монеты]"),
         BotCommand(command="boss", description="👾 Рейд на босса в чате"),
-        BotCommand(command="adventure", description="🌃 Ночные похождения по автобану"),
         BotCommand(command="wheel", description="🎰 Колесо Фортуны AMG"),
         BotCommand(command="drag", description="🚦 Драг-рейсинг 402м"),
         BotCommand(command="tournament", description="🏆 Гран-при турнир чата"),

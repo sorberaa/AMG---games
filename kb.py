@@ -169,7 +169,6 @@ def not_enough_coins_kb(back_target: str = "shop") -> InlineKeyboardMarkup:
 
 def race_menu_kb(energy: int = 10) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
-    b.row(Btn(text="🏎 Одиночный заезд с подарками 🎁", callback_data="race_solo"))
     b.row(
         Btn(text="⚔️ Дуэль 1х1", callback_data="race_pvp"),
         Btn(text="🏆 Гран-при турнир", callback_data="rmode:tourn")
@@ -184,10 +183,9 @@ def race_menu_kb(energy: int = 10) -> InlineKeyboardMarkup:
     )
     b.row(
         Btn(text="📦 Аирдроп контейнер", callback_data="rmode:airdrop"),
-        Btn(text="🌃 Ночной выезд", callback_data="rmode:adv")
+        Btn(text="🎰 Колесо Фортуны", callback_data="rmode:wheel")
     )
     b.row(
-        Btn(text="🎰 Колесо Фортуны", callback_data="rmode:wheel"),
         Btn(text="🧠 Викторина AMG", callback_data="rmode:quiz")
     )
     b.row(

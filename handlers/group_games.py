@@ -1232,6 +1232,8 @@ async def cb_royale_start(cb: CallbackQuery):
 @router.message(Command("wheel"))
 @router.message(Command("spin"))
 async def cmd_wheel(message: Message):
+    if message.chat.type == "private":
+        return await message.answer("🎰 Колесо Фортуны доступно только в командном чате! Добавь бота в группу и пиши /wheel")
     gif_tag = f"<a href='{data.AMG_GIFS['wheel']}'>&#8205;</a>"
     from kb import wheel_kb
     uid = message.from_user.id
@@ -1320,6 +1322,8 @@ async def execute_wheel_spin(cb: CallbackQuery, is_extra: bool = False):
 
 @router.callback_query(F.data == "wheel:spin")
 async def cb_wheel_spin(cb: CallbackQuery):
+    if cb.message.chat.type == "private":
+        return await cb.answer("🎰 Колесо Фортуны доступно только в командном чате! Добавь бота в группу и пиши /wheel", show_alert=True)
     uid = cb.from_user.id
     today = db.now_str()[:10]
     p = await db.get_player(uid)
@@ -1352,6 +1356,8 @@ async def cb_wheel_spin(cb: CallbackQuery):
 
 @router.callback_query(F.data == "wheel:spin_extra")
 async def cb_wheel_spin_extra(cb: CallbackQuery):
+    if cb.message.chat.type == "private":
+        return await cb.answer("🎰 Колесо Фортуны доступно только в командном чате! Добавь бота в группу и пиши /wheel", show_alert=True)
     await execute_wheel_spin(cb, is_extra=True)
 
 
@@ -1363,6 +1369,7 @@ ADVENTURE_STATES = {}  # user_id -> scenario_idx
 @router.message(Command("adventure"))
 @router.message(Command("trip"))
 async def cmd_adventure(message: Message):
+    return await message.answer("🤝 Одиночные ночные выезды убраны — играйте командой в групповом чате: /boss, /chase, /tournament, /royale, /drag, /airdrop, /quiz, /wheel")
 
     uid = message.from_user.id
     today = db.now_str()[:10]
@@ -1402,6 +1409,7 @@ async def cmd_adventure(message: Message):
 
 @router.callback_query(F.data.startswith("adv:choice:"))
 async def cb_adventure_choice(cb: CallbackQuery):
+    return await cb.answer("🤝 Одиночные ночные выезды убраны — играйте командой в групповом чате: /boss, /chase, /tournament, /royale, /drag, /airdrop, /quiz, /wheel", show_alert=True)
     parts = cb.data.split(":")
     sc_idx = int(parts[2])
     ch_idx = int(parts[3])

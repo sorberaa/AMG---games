@@ -103,7 +103,7 @@ async def solo_race_view(uid: int):
 @router.callback_query(F.data == "race_solo")
 @router.callback_query(F.data == "race_street")
 async def cb_solo_race(cb: CallbackQuery):
-    await cb.answer()
+    return await cb.answer("🤝 Одиночные режимы убраны! Играйте командой в групповом чате: /boss, /chase, /tournament, /royale, /drag, /airdrop, /quiz, /wheel", show_alert=True)
     text, kb = await solo_race_view(cb.from_user.id)
     await safe_edit(cb, text, kb)
 
@@ -131,6 +131,7 @@ async def apply_result(uid: int, car_id: int, won: bool, race_type: str, mult: f
 @router.callback_query(F.data == "race_solo_start")
 @router.callback_query(F.data.startswith("race_street:"))
 async def cb_solo_race_start(cb: CallbackQuery):
+    return await cb.answer("🤝 Одиночные режимы убраны! Играйте командой в групповом чате: /boss, /chase, /tournament, /royale, /drag, /airdrop, /quiz, /wheel", show_alert=True)
     uid = cb.from_user.id
     pc = await db.get_selected_car(uid)
     if not pc:
@@ -245,7 +246,7 @@ async def cb_race_mode(cb: CallbackQuery):
     is_group = (cb.message.chat.type != "private")
     chat_id = cb.message.chat.id
 
-    if mode == "wheel":
+    if mode == "wheel" and is_group:
         await cb.answer()
         gif_tag = f"<a href='{data.AMG_GIFS['wheel']}'>&#8205;</a>"
         from kb import wheel_kb
@@ -263,34 +264,7 @@ async def cb_race_mode(cb: CallbackQuery):
         )
 
     if mode == "adv":
-        uid = cb.from_user.id
-        today = db.now_str()[:10]
-        adv_count = await db.get_cooldown(f"adv_cnt:{uid}:{today}")
-        if adv_count >= 3:
-            return await cb.answer("⏳ Ты уже совершил 3 выезда сегодня! Возвращайся завтра.", show_alert=True)
-        pc = await db.get_selected_car(uid)
-        if not pc:
-            return await cb.answer("Сначала выбери авто в гараже!", show_alert=True)
-        p = await db.get_player(uid)
-        if p["energy"] < 2:
-            return await cb.answer("⚡ Для выезда нужно 2 энергии!", show_alert=True)
-        await cb.answer()
-        sc_idx = random.randint(0, len(data.ADVENTURE_SCENARIOS) - 1)
-        scenario = data.ADVENTURE_SCENARIOS[sc_idx]
-        from handlers.group_games import ADVENTURE_STATES
-        ADVENTURE_STATES[uid] = sc_idx
-        from kb import adventure_choice_kb
-        gif_tag = f"<a href='{data.AMG_GIFS['autobahn']}'>&#8205;</a>"
-        car = CAR_CATALOG[pc["car_key"]]
-        return await safe_edit(
-            cb,
-            f"{gif_tag}🌃 <b>НОЧНОЙ ВЫЕЗД AMG: {scenario['title'].upper()}</b>\n\n"
-            f"🚗 Твой болид: <b>{car['name']}</b>\n"
-            f"📊 Поездка: <b>{int(adv_count) + 1}/3 за сегодня</b>\n\n"
-            f"📖 <i>{scenario['desc']}</i>\n\n"
-            f"<b>Сделай свой выбор:</b>",
-            adventure_choice_kb(sc_idx, scenario["choices"])
-        )
+        return await cb.answer("🤝 Одиночные режимы убраны! Играйте командой в групповом чате: /boss, /chase, /tournament, /royale, /drag, /airdrop, /quiz, /wheel", show_alert=True)
 
     if is_group:
         await cb.answer()
@@ -376,6 +350,14 @@ async def cb_race_mode(cb: CallbackQuery):
             "• Банда собирается для вскрытия тяжелого замка (мин. 2 участника)\n"
             "• Топовый лут, монеты и детали распределяются между всеми, кто успел!\n\n"
             "<i>Сбрось аирдроп в группу кнопкой ниже или командой /airdrop!</i>"
+        ),
+        "wheel": (
+            data.AMG_GIFS["wheel"],
+            "🎰 <b>КОЛЕСО ФОРТУНЫ ЧАТА (/wheel)</b>",
+            "Командное колесо для всей банды в групповом чате!\n\n"
+            "• Крутите рулетку в чате — призы: монеты, энергия, опыт\n"
+            "• Каждый гонщик чата — 1 бесплатный спин в сутки\n\n"
+            "<i>Запусти колесо в группе кнопкой ниже или командой /wheel!</i>"
         ),
         "quiz": (
             data.AMG_GIFS["welcome"],
