@@ -850,6 +850,21 @@ async def log_coin_tx(user_id: int, amount: int, reason: str):
         pass
 
 
+async def count_energy_refills_today(user_id: int) -> int:
+    """Считает количество покупок пополнения энергии за монеты за текущие сутки."""
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    try:
+        async with _connect() as db_conn:
+            cur = await db_conn.execute(
+                "SELECT COUNT(*) FROM coin_transactions WHERE user_id = ? AND reason LIKE 'Покупка: ⚡ Полная энергия%' AND created_at >= ?",
+                (user_id, _ts_param(today))
+            )
+            row = await cur.fetchone()
+            return int(row[0]) if row else 0
+    except Exception:
+        return 0
+
+
 async def get_cooldown(target_key: str) -> float:
     """Получает unix timestamp последнего запуска события."""
     async with _connect() as db:

@@ -237,8 +237,17 @@ async def cb_coin_buy(cb: CallbackQuery):
         return await cb.answer("Товар не найден", show_alert=True)
     p = await db.get_player(uid)
 
-    if key == "energy_refill" and p["energy"] >= p["max_energy"]:
-        return await cb.answer("Энергия и так полная ⚡", show_alert=True)
+    refills_today = 0
+    if key == "energy_refill":
+        if p["energy"] >= p["max_energy"]:
+            return await cb.answer("Энергия и так полная ⚡", show_alert=True)
+        refills_today = await db.count_energy_refills_today(uid)
+        if refills_today >= 3:
+            return await cb.answer(
+                "⏳ Дневной лимит: максимум 3 пополнения за монеты в день!\n\n"
+                "Энергия пополняется бесплатно (+1 каждые 30 мин) или в Звёздном магазине ⭐.",
+                show_alert=True
+            )
     if key == "energy_plus" and p["max_energy"] >= MAX_ENERGY_CAP:
         return await cb.answer("Достигнут максимум энергии!", show_alert=True)
     if key == "insurance" and p.get("has_insurance"):
@@ -260,7 +269,8 @@ async def cb_coin_buy(cb: CallbackQuery):
     result = ""
     if key == "energy_refill":
         await db.update_player(uid, energy=p["max_energy"])
-        result = f"⚡ Энергия восстановлена до {p['max_energy']}!"
+        left = max(0, 3 - (refills_today + 1))
+        result = f"⚡ <b>Энергия восстановлена до {p['max_energy']}!</b>\n(Осталось пополнений за монеты сегодня: {left})"
     elif key == "energy_plus":
         await db.update_player(uid, max_energy=p["max_energy"] + 1, energy=p["energy"] + 1)
         result = f"🔋 Максимум энергии теперь {p['max_energy'] + 1}!"

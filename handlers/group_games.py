@@ -18,7 +18,7 @@ logger = logging.getLogger("amg.group_games")
 
 router = Router(name="group_games")
 
-BOSS_COOLDOWN = 0        # Без таймаутов!
+BOSS_COOLDOWN = 1800     # 30 минут между рейдами на босса в одном чате
 QUIZ_COOLDOWN = 3 * 3600  # 3 часа строго (защита от накрутки)
 AIRDROP_COOLDOWN = 60     # 1 минута
 CHASE_COOLDOWN = 0        # Без таймаутов!
@@ -225,8 +225,8 @@ async def execute_boss_strike(cb: CallbackQuery, is_nitro: bool = False):
                 (b for b in data.BOSS_ROSTER if b.get("name") == boss.get("boss_name") or b.get("car_key") == boss.get("boss_car")),
                 None
             )
-            total_pool = boss_info["coins_pool"] if boss_info else 500
-            total_xp_pool = max(2500, int(total_pool * 5))
+            total_pool = boss_info["coins_pool"] if boss_info else 150
+            total_xp_pool = max(2500, int(total_pool * 10))
             total_damage = sum(d["damage"] for d in damagers) or 1
 
             boost = await db.get_chat_boost(chat_id)
@@ -234,32 +234,33 @@ async def execute_boss_strike(cb: CallbackQuery, is_nitro: bool = False):
             boost_note = f"\n\n🔥 <b>Применён Буст чата x2! Награды удвоены спонсором {boost['sponsor_name']}!</b>" if boost else ""
 
             # Справедливое распределение призового фонда босса по доле урона!
-            # Начисление НАПРЯМУЮ через add_coins (без дневных урезаний soft-cap!)
+            # Начисление через grant_coins с защитой от соло-фарма и учетом дневных лимитов
             user_rewards = {}
             for i, d in enumerate(damagers):
                 target_uid = d["user_id"]
                 dmg_share = d["damage"] / total_damage
 
                 if len(damagers) == 1:
-                    c_reward = total_pool
-                    x_reward = total_xp_pool
+                    # Соло-победа: защита от фарма пустых чатов
+                    c_reward = min(45, int(total_pool * 0.35))
+                    x_reward = min(1500, int(total_xp_pool * 0.35))
                 elif i == 0:
-                    # 1 место: минимум 35% призового фонда или пропорционально урону
-                    c_reward = max(int(total_pool * 0.35), int(total_pool * dmg_share))
-                    x_reward = max(1200, int(total_xp_pool * dmg_share))
+                    # 1 место: максимум 40% призового фонда
+                    c_reward = min(int(total_pool * 0.40), max(25, int(total_pool * dmg_share)))
+                    x_reward = max(1000, int(total_xp_pool * dmg_share))
                 elif i < 3:
-                    c_reward = max(25, int(total_pool * dmg_share))
-                    x_reward = max(600, int(total_xp_pool * dmg_share))
-                else:
                     c_reward = max(15, int(total_pool * dmg_share))
-                    x_reward = max(250, int(total_xp_pool * dmg_share))
+                    x_reward = max(500, int(total_xp_pool * dmg_share))
+                else:
+                    c_reward = max(10, int(total_pool * dmg_share))
+                    x_reward = max(200, int(total_xp_pool * dmg_share))
 
                 c_reward *= boost_mult
                 x_reward *= boost_mult
 
-                user_rewards[target_uid] = {"coins": c_reward, "xp": x_reward}
-                await db.add_coins(target_uid, c_reward, reason=f"Победа над боссом {boss['boss_name']}")
+                actual_coins = await db.grant_coins(target_uid, c_reward, reason=f"Победа над боссом {boss['boss_name']}")
                 await db.add_xp(target_uid, x_reward)
+                user_rewards[target_uid] = {"coins": actual_coins, "xp": x_reward}
 
             medals = ["🥇", "🥈", "🥉"]
             lines = []
@@ -281,11 +282,14 @@ async def execute_boss_strike(cb: CallbackQuery, is_nitro: bool = False):
             except Exception:
                 pass
 
+            solo_note = "\n\n💡 <i>Боссы созданы для командных рейдов — зовите друзей в чат, чтобы биться за полный банк!</i>" if len(damagers) == 1 else ""
+            cooldown_note = "\n⏳ <i>Следующий босс в этом чате будет доступен через 30 минут.</i>"
             gif_tag = f"<a href='{data.AMG_GIFS['win']}'>&#8205;</a>"
             await cb.message.answer(
                 f"{gif_tag}🏆 <b>БОСС «{boss['boss_name']}» ПОЛНОСТЬЮ УНИЧТОЖЕН!</b>\n\n"
                 f"🎉 Чат одержал сокрушительную победу! Призовой фонд <b>{fmt(total_pool * boost_mult)} 🪙 монет</b> распределён между всеми участниками битвы по нанесённому урону!{boost_note}\n\n"
-                f"👑 <b>ГЕРОИ БИТВЫ И ПОЛУЧЕННЫЕ НАГРАДЫ:</b>\n" + ("\n".join(lines) if lines else "—")
+                f"👑 <b>ГЕРОИ БИТВЫ И ПОЛУЧЕННЫЕ НАГРАДЫ:</b>\n" + ("\n".join(lines) if lines else "—") +
+                f"{solo_note}{cooldown_note}"
             )
         else:
             # Обновляем сообщение босса в чате
