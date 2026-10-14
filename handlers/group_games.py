@@ -18,7 +18,7 @@ logger = logging.getLogger("amg.group_games")
 
 router = Router(name="group_games")
 
-BOSS_COOLDOWN = 60        # 1 минута
+BOSS_COOLDOWN = 0        # Без таймаутов!
 QUIZ_COOLDOWN = 3 * 3600  # 3 часа строго (защита от накрутки)
 AIRDROP_COOLDOWN = 60     # 1 минута
 CHASE_COOLDOWN = 0        # Без таймаутов!
@@ -108,23 +108,15 @@ async def cmd_boss(message: Message):
             f"Город свободен. Теперь вы можете вызвать нового свежего босса через /boss!"
         )
 
-    # Автоматическая очистка старого зависшего босса (> 2 часов)
-    if boss and get_boss_age_seconds(boss) > 7200:
-        await db.delete_boss(chat_id)
-        boss = None
-        await message.answer(
-            "💨 <b>Предыдущий босс скрылся от погони!</b>\n"
-            "Время рейда (2 часа) истекло. Дороги свободны — призываем нового босса! 👇"
-        )
-
     if not boss:
-        on_cd, rem_t = await check_chat_cooldown(chat_id, "boss", BOSS_COOLDOWN)
-        if on_cd:
-            return await message.answer(
-                f"⏳ <b>Рейдовый босс в этом чате уже был повержен!</b>\n\n"
-                f"Следующий босс появится через: <b>{rem_t}</b>.\n"
-                f"<i>Пока ждёшь, устрой дуэль (/duel) или собери турнир (/tournament)!</i>"
-            )
+        if BOSS_COOLDOWN > 0:
+            on_cd, rem_t = await check_chat_cooldown(chat_id, "boss", BOSS_COOLDOWN)
+            if on_cd:
+                return await message.answer(
+                    f"⏳ <b>Рейдовый босс в этом чате уже был повержен!</b>\n\n"
+                    f"Следующий босс появится через: <b>{rem_t}</b>.\n"
+                    f"<i>Пока ждёшь, устрой дуэль (/duel) или собери турнир (/tournament)!</i>"
+                )
         boss_data = random.choice(data.BOSS_ROSTER)
         boss = await db.create_boss(chat_id, boss_data["name"], boss_data["car_key"], boss_data["hp"])
         car = CAR_CATALOG[boss_data["car_key"]]
@@ -137,8 +129,7 @@ async def cmd_boss(message: Message):
             f"⚡ Способность: <i>{boss_data['ability']}</i>\n"
             f"💬 <i>{boss_data['phrase']}</i>\n\n"
             f"🎁 <b>Призовой фонд победы:</b> {boss_data['coins_pool']} 🪙 монет\n"
-            f"🏆 Дополнительный трофей: <b>{boss_data['loot']}</b>\n"
-            f"⏱ <i>Время рейда: 2 часа</i>\n\n"
+            f"🏆 Дополнительный трофей: <b>{boss_data['loot']}</b>\n\n"
             "Объединяйтесь всем чатом! Выбирайте обычный таран или мощный Нитро-удар! 👇",
             reply_markup=boss_kb(can_flee=False)
         )
@@ -148,7 +139,7 @@ async def cmd_boss(message: Message):
         bar = "▰" * bar_len + "▱" * (10 - bar_len)
         gif_tag = f"<a href='{data.AMG_GIFS['boss_rage']}'>&#8205;</a>" if pct <= 40 else f"<a href='{data.AMG_GIFS['boss']}'>&#8205;</a>"
         rage_note = "\n⚠️ <b>ВНИМАНИЕ: БОСС ВПАЛ В ЯРОСТЬ!</b> Контратаки усилены!" if pct <= 40 else ""
-        can_flee = get_boss_age_seconds(boss) > 900
+        can_flee = get_boss_age_seconds(boss) > 300
         await message.answer(
             f"{gif_tag}👾 <b>Босс: {boss['boss_name']}</b>\n"
             f"❤️ {bar} <b>{fmt(boss['current_hp'])}/{fmt(boss['max_hp'])} HP</b> ({pct}%){rage_note}\n\n"
@@ -165,21 +156,6 @@ async def execute_boss_strike(cb: CallbackQuery, is_nitro: bool = False):
         boss = await db.get_active_boss(chat_id)
         if not boss:
             return await cb.answer("Босс уже повержен или скрылся!", show_alert=True)
-
-        # Проверка на истечение времени рейда (2 часа)
-        if get_boss_age_seconds(boss) > 7200:
-            await db.delete_boss(chat_id)
-            await cb.answer("💨 Время рейда истекло! Босс скрылся в неизвестном направлении.", show_alert=True)
-            try:
-                await cb.message.edit_text(
-                    f"💨 <b>БОСС СКРЫЛСЯ!</b>\n\n"
-                    f"Время рейда (2 часа) истекло. Босс уехал чиниться на базу.\n"
-                    f"Вызовите нового босса командой /boss!",
-                    reply_markup=None
-                )
-            except Exception:
-                pass
-            return
 
         # 1. ОБЯЗАТЕЛЬНО восстанавливаем энергию игрока перед проверкой!
         await db.regen_energy(uid)
