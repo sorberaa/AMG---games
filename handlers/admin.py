@@ -1,4 +1,4 @@
-import html
+﻿import html
 import logging
 from datetime import datetime, timedelta
 from aiogram import F, Router
@@ -677,7 +677,7 @@ async def adm_router(cb: CallbackQuery, state: FSMContext, player: dict = None):
             await notify()
             await show_db_info(cb)
         elif action == "db_backup":
-            await db.backup_sqlite_to_json()
+            await db.backup_sqlite_to_json(force=True)
             await notify("✅ Резервный бэкап сохранен в data/backup_amg_game.json")
             await show_db_info(cb)
         elif action == "bosses":

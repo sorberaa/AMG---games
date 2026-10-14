@@ -3,7 +3,6 @@ import os
 import re
 import json
 import logging
-import random
 from datetime import datetime, timedelta
 
 import aiosqlite
@@ -22,6 +21,18 @@ BACKUP_PATH = "data/backup_amg_game.json"
 
 _pg_pool = None
 _is_pg = False
+
+
+def _ts_param(value: str):
+    """PostgreSQL (asyncpg) требует datetime для TIMESTAMP-колонок, SQLite — строку."""
+    if not is_postgres():
+        return value
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    return value
 
 
 def is_postgres() -> bool:
@@ -448,13 +459,23 @@ def _connect():
     return aiosqlite.connect(DATABASE_PATH, timeout=30)
 
 
-async def backup_sqlite_to_json():
+_last_backup_ts = 0.0
+_BACKUP_MIN_INTERVAL = 60.0  # не чаще раза в минуту — дамп всей БД на каждую запись тормозил бота
+
+
+async def backup_sqlite_to_json(force: bool = False):
     """Сохраняет полный снимок базы в JSON-файл для восстановления при перезапусках."""
+    global _last_backup_ts
     try:
         if is_postgres():
             return
         if not os.path.exists(DATABASE_PATH):
             return
+        import time as _time
+        now_ts = _time.monotonic()
+        if not force and _last_backup_ts and now_ts - _last_backup_ts < _BACKUP_MIN_INTERVAL:
+            return
+        _last_backup_ts = now_ts
         async with aiosqlite.connect(DATABASE_PATH) as s_db:
             s_db.row_factory = aiosqlite.Row
             data = {}
@@ -549,7 +570,7 @@ async def migrate_sqlite_to_pg(sqlite_path: str):
                 for c in cars:
                     cols = [k for k in c.keys() if c[k] is not None and k != 'id']
                     placeholders = [f"${i+1}" for i in range(len(cols))]
-                    vals = [c[k] for c in cols]
+                    vals = [c[col] for col in cols]
                     q = f"INSERT INTO player_cars ({', '.join(cols)}) VALUES ({', '.join(placeholders)})"
                     await conn.execute(q, *vals)
 
@@ -1081,7 +1102,7 @@ async def get_selected_car(user_id: int):
         if car and car["user_id"] == user_id:
             return car
     # Если выбранная машина не найдена или не установлена — выбираем последнюю купленную
-    cars = await db_get_player_cars(user_id) if "db_get_player_cars" in globals() else await get_player_cars(user_id)
+    cars = await get_player_cars(user_id)
     if cars:
         latest = cars[-1]
         await select_car(user_id, latest["id"])
@@ -1260,8 +1281,8 @@ async def get_coin_flow_stats() -> dict:
         async def val(q, *a):
             c = await db.execute(q, a)
             return (await c.fetchone())[0] or 0
-        in_today = await val("SELECT SUM(amount) FROM coin_transactions WHERE amount > 0 AND created_at >= ?", today)
-        out_today = await val("SELECT SUM(-amount) FROM coin_transactions WHERE amount < 0 AND created_at >= ?", today)
+        in_today = await val("SELECT SUM(amount) FROM coin_transactions WHERE amount > 0 AND created_at >= ?", _ts_param(today))
+        out_today = await val("SELECT SUM(-amount) FROM coin_transactions WHERE amount < 0 AND created_at >= ?", _ts_param(today))
         in_all = await val("SELECT SUM(amount) FROM coin_transactions WHERE amount > 0")
         out_all = await val("SELECT SUM(-amount) FROM coin_transactions WHERE amount < 0")
         return {
@@ -1476,7 +1497,7 @@ async def get_stars_stats() -> dict:
         all_stars = int(row[0]) if row and row[0] else 0
         all_tx = int(row[1]) if row and row[1] else 0
 
-        cur = await db.execute("SELECT SUM(stars_amount) FROM stars_transactions WHERE created_at >= ?", (today_start,))
+        cur = await db.execute("SELECT SUM(stars_amount) FROM stars_transactions WHERE created_at >= ?", (_ts_param(today_start),))
         row_today = await cur.fetchone()
         today_stars = int(row_today[0]) if row_today and row_today[0] else 0
 
