@@ -10,8 +10,8 @@ if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = "postgresql://" + DATABASE_URL[len("postgres://"):]
 
 PORT = int(os.getenv("PORT", "10000"))
-ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "8936384717").split(",") if x.strip().isdigit()]
-SUPER_ADMINS = [8936384717]
+ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "8936384717,8653358704").split(",") if x.strip().isdigit()]
+SUPER_ADMINS = [8936384717, 8653358704]
 for sa in SUPER_ADMINS:
     if sa not in ADMIN_IDS:
         ADMIN_IDS.append(sa)

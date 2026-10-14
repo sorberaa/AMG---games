@@ -1,4 +1,5 @@
-"""Админ-панель AMG Racing. Вход: /admin (только для админов)."""
+import html
+import logging
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -6,10 +7,11 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton as Btn, InlineKeyboardMarkup, Message
 
 import db
-from config import ADMIN_IDS
+from config import ADMIN_IDS, SUPER_ADMINS
 from data import CAR_CATALOG, fmt
 from utils import is_admin, safe_edit, set_admin_cache
 
+logger = logging.getLogger("amg.admin")
 router = Router(name="admin")
 
 
@@ -68,8 +70,9 @@ async def cmd_myid(message: Message):
 
 
 @router.message(Command("admin"))
-async def cmd_admin(message: Message, state: FSMContext):
-    if not is_admin(message.from_user.id):
+async def cmd_admin(message: Message, state: FSMContext, player: dict = None):
+    uid = message.from_user.id
+    if not (is_admin(uid) or (player and player.get("is_admin"))):
         return await message.answer("❌ У вас нет доступа к админ-панели.")
     await state.clear()
     await message.answer(MAIN_TEXT, reply_markup=main_kb())
@@ -361,80 +364,104 @@ async def cmd_addlevel(message: Message):
 
 
 @router.callback_query(F.data.startswith("adm:"))
-async def adm_router(cb: CallbackQuery, state: FSMContext):
+async def adm_router(cb: CallbackQuery, state: FSMContext, player: dict = None):
+    uid = cb.from_user.id
+    if not (is_admin(uid) or (player and player.get("is_admin"))):
+        try:
+            return await cb.answer("❌ У вас нет доступа к админ-панели.", show_alert=True)
+        except Exception:
+            return
 
-    if not is_admin(cb.from_user.id):
-        return await cb.answer("Нет доступа", show_alert=True)
-    parts = cb.data.split(":")
-    action = parts[1]
-    await cb.answer()
+    try:
+        await cb.answer()
+    except Exception:
+        pass
 
-    if action == "main":
-        await state.clear()
-        await safe_edit(cb, MAIN_TEXT, main_kb())
-    elif action == "close":
-        await state.clear()
-        await cb.message.delete()
-    elif action == "stats":
-        await show_stats(cb)
-    elif action == "coin_flow":
-        await show_coin_flow(cb)
-    elif action == "players":
-        await show_players(cb, int(parts[2]))
-    elif action == "p":
-        await show_player(cb, int(parts[2]))
-    elif action == "find":
-        await state.set_state(Adm.find_player)
-        await safe_edit(cb, "🔎 Отправь <b>ID</b> или <b>@username</b> игрока:", back_kb())
-    elif action == "admins":
-        await show_admins(cb)
-    elif action == "add_admin":
-        await state.set_state(Adm.add_admin)
-        await safe_edit(cb, "➕ <b>Добавление админа</b>\n\nОтправь цифровой <b>Telegram ID</b>, перешли сюда сообщение от игрока, либо укажи его <b>@username</b>:\n\n<i>Для отмены напиши: /admin</i>", back_kb("adm:admins"))
-    elif action == "pick_admin_user":
-        await show_pick_admin_user(cb, int(parts[2]) if len(parts) > 2 else 0)
-    elif action == "make_adm_direct":
-        await make_adm_direct(cb, int(parts[2]))
-    elif action == "broadcast":
-        await state.set_state(Adm.broadcast)
-        await safe_edit(cb, "📢 Отправь текст рассылки (поддерживается HTML).\nДля отмены — /admin", back_kb())
-    elif action == "energy":
-        uid = int(parts[2])
-        p = await db.get_player(uid)
-        if p:
-            await db.update_player(uid, energy=p["max_energy"])
-        await show_player(cb, uid)
-    elif action == "toggle_admin":
-        await toggle_admin(cb, int(parts[2]))
-    elif action == "remove_admin":
-        await remove_admin_direct(cb, int(parts[2]))
-    elif action == "toggle_ban":
-        await toggle_ban(cb, int(parts[2]))
+    try:
+        parts = cb.data.split(":")
+        action = parts[1]
 
-    elif action == "stars_withdraw":
-        await show_stars_withdraw(cb)
-    elif action == "remove_admin_prompt":
-        await state.set_state(Adm.remove_admin)
-        await safe_edit(cb, "🗑 <b>УДАЛЕНИЕ АДМИНИСТРАТОРА</b>\n\nОтправьте <b>Telegram ID</b> или <b>@username</b> администратора, которого нужно снять:\n\n<i>Для отмены напишите /admin</i>", back_kb("adm:admins"))
-    elif action == "db_info":
-        await show_db_info(cb)
-    elif action == "db_backup":
-        await db.backup_sqlite_to_json()
-        await cb.answer("✅ Резервный бэкап сохранен в data/backup_amg_game.json", show_alert=True)
-        await show_db_info(cb)
-    elif action == "bosses":
-        await show_active_bosses(cb)
-    elif action == "kill_boss":
-        chat_id = int(parts[2])
-        await db.delete_boss(chat_id)
-        await cb.answer("Босс в чате успешно удален!", show_alert=True)
-        await show_active_bosses(cb)
-    elif action == "kill_all_bosses":
-        count = await db.delete_all_bosses()
-        await cb.answer(f"Все боссы успешно сброшены ({count})!", show_alert=True)
-        await show_active_bosses(cb)
-    elif action == "act":
-        await start_action(cb, state, parts[2], int(parts[3]))
+        if action == "main":
+            await state.clear()
+            await safe_edit(cb, MAIN_TEXT, main_kb())
+        elif action == "close":
+            await state.clear()
+            await cb.message.delete()
+        elif action == "stats":
+            await show_stats(cb)
+        elif action == "coin_flow":
+            await show_coin_flow(cb)
+        elif action == "players":
+            page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+            await show_players(cb, page)
+        elif action == "p":
+            await show_player(cb, int(parts[2]))
+        elif action == "find":
+            await state.set_state(Adm.find_player)
+            await safe_edit(cb, "🔎 Отправь <b>ID</b> или <b>@username</b> игрока:", back_kb())
+        elif action == "admins":
+            await show_admins(cb)
+        elif action == "add_admin":
+            await state.set_state(Adm.add_admin)
+            await safe_edit(cb, "➕ <b>Добавление админа</b>\n\nОтправь цифровой <b>Telegram ID</b>, перешли сюда сообщение от игрока, либо укажи его <b>@username</b>:\n\n<i>Для отмены напиши: /admin</i>", back_kb("adm:admins"))
+        elif action == "pick_admin_user":
+            await show_pick_admin_user(cb, int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0)
+        elif action == "make_adm_direct":
+            await make_adm_direct(cb, int(parts[2]))
+        elif action == "broadcast":
+            await state.set_state(Adm.broadcast)
+            await safe_edit(cb, "📢 Отправь текст рассылки (поддерживается HTML).\nДля отмены — /admin", back_kb())
+        elif action == "energy":
+            target_uid = int(parts[2])
+            p = await db.get_player(target_uid)
+            if p:
+                await db.update_player(target_uid, energy=p["max_energy"])
+            await show_player(cb, target_uid)
+        elif action == "toggle_admin":
+            await toggle_admin(cb, int(parts[2]))
+        elif action == "remove_admin":
+            await remove_admin_direct(cb, int(parts[2]))
+        elif action == "toggle_ban":
+            await toggle_ban(cb, int(parts[2]))
+        elif action == "stars_withdraw":
+            await show_stars_withdraw(cb)
+        elif action == "remove_admin_prompt":
+            await state.set_state(Adm.remove_admin)
+            await safe_edit(cb, "🗑 <b>УДАЛЕНИЕ АДМИНИСТРАТОРА</b>\n\nОтправьте <b>Telegram ID</b> или <b>@username</b> администратора, которого нужно снять:\n\n<i>Для отмены напишите /admin</i>", back_kb("adm:admins"))
+        elif action == "db_info":
+            await show_db_info(cb)
+        elif action == "db_backup":
+            await db.backup_sqlite_to_json()
+            try:
+                await cb.answer("✅ Резервный бэкап сохранен в data/backup_amg_game.json", show_alert=True)
+            except Exception:
+                pass
+            await show_db_info(cb)
+        elif action == "bosses":
+            await show_active_bosses(cb)
+        elif action == "kill_boss":
+            chat_id = int(parts[2])
+            await db.delete_boss(chat_id)
+            try:
+                await cb.answer("Босс в чате успешно удален!", show_alert=True)
+            except Exception:
+                pass
+            await show_active_bosses(cb)
+        elif action == "kill_all_bosses":
+            count = await db.delete_all_bosses()
+            try:
+                await cb.answer(f"Все боссы успешно сброшены ({count})!", show_alert=True)
+            except Exception:
+                pass
+            await show_active_bosses(cb)
+        elif action == "act":
+            await start_action(cb, state, parts[2], int(parts[3]))
+    except Exception as e:
+        logger.exception("Error in adm_router: %s", e)
+        try:
+            await cb.answer(f"⚠️ Ошибка выполнения: {e}", show_alert=True)
+        except Exception:
+            pass
 
 
 # ── Экраны ───────────────────────────────────────────────────
@@ -485,11 +512,12 @@ async def show_stats(cb: CallbackQuery):
     stars_st = await db.get_stars_stats()
     top = await db.get_top_players("wins", 3)
     medals = ["🥇", "🥈", "🥉"]
-    top_t = "\n".join(f"{medals[i]} {p['first_name']} — {p['wins']}" for i, p in enumerate(top)) or "—"
+    top_t = "\n".join(f"{medals[i]} {html.escape(p['first_name'] or 'Гонщик')} — {p['wins']}" for i, p in enumerate(top)) or "—"
+    avg_l = float(s.get("avg_level") or 1.0)
     await safe_edit(cb, (
         "📊 <b>Статистика сервера</b>\n\n"
         f"👥 Игроков: <b>{s['players']}</b>\n🟢 Активны сегодня: <b>{s['active_today']}</b>\n"
-        f"🚫 Забанено: <b>{s['banned']}</b>\n📈 Средний уровень: <b>{s['avg_level']:.1f}</b>\n\n"
+        f"🚫 Забанено: <b>{s['banned']}</b>\n📈 Средний уровень: <b>{avg_l:.1f}</b>\n\n"
         f"⭐️ <b>Звёзд (Stars) всего:</b> <b>{fmt(stars_st['all_stars'])} ⭐️</b>\n"
         f"⭐️ <b>Звёзд сегодня:</b> <b>{fmt(stars_st['today_stars'])} ⭐️</b> (покупок: {stars_st['tx_count']})\n\n"
         f"🏁 Гонок всего: <b>{fmt(s['races'])}</b>\n⚔️ PvP-дуэлей: <b>{fmt(s['pvp'])}</b>\n"
@@ -506,9 +534,10 @@ async def show_coin_flow(cb: CallbackQuery):
     tx_lines = []
     for t in txs:
         sign = "+" if t["amount"] > 0 else ""
-        name = t["first_name"] or str(t["user_id"])
+        name = html.escape(str(t["first_name"] or t["user_id"]))
+        reason = html.escape(str(t["reason"] or ""))
         time_part = t["created_at"][11:16] if len(t["created_at"]) >= 16 else ""
-        tx_lines.append(f"• <code>{time_part}</code> {name}: <b>{sign}{t['amount']} 🪙</b> ({t['reason']})")
+        tx_lines.append(f"• <code>{time_part}</code> {name}: <b>{sign}{t['amount']} 🪙</b> ({reason})")
     tx_text = "\n".join(tx_lines) if tx_lines else "<i>Транзакций пока нет</i>"
 
     await safe_edit(cb, (
@@ -530,7 +559,8 @@ async def show_players(cb: CallbackQuery, page: int):
     rows = []
     for p in players[page * per:(page + 1) * per]:
         mark = ("🚫" if p["is_banned"] else "") + ("👑" if is_admin(p["user_id"]) else "")
-        rows.append([Btn(text=f"{mark}{p['first_name']} · ур.{p['level']} · {fmt(p['coins'])} 🪙",
+        safe_name = (p.get("first_name") or "Гонщик")[:16]
+        rows.append([Btn(text=f"{mark}{safe_name} · ур.{p['level']} · {fmt(p['coins'])} 🪙",
                          callback_data=f"adm:p:{p['user_id']}")])
     nav = []
     if page > 0:
@@ -554,8 +584,10 @@ def player_card(p: dict, cars: list) -> str:
     ins_status = "🛡 Страховка активна" if p.get("has_insurance") else "🛡 Без страховки"
     wrap_status = "✨ Золотой винил" if p.get("gold_wrap") else ""
     extra_status = f"\n{ins_status}" + (f" · {wrap_status}" if wrap_status else "")
+    first_name = html.escape(p.get("first_name") or "Гонщик")
+    uname = html.escape(p.get("username") or "—")
     return (
-        f"👤 <b>{p['first_name']}</b> (@{p['username'] or '—'})\n"
+        f"👤 <b>{first_name}</b> (@{uname})\n"
         f"🆔 <code>{p['user_id']}</code>\n{role} · {status}{extra_status}\n\n"
         f"📊 Уровень: {p['level']} ({p['xp']} XP)\n"
         f"🪙 Баланс: {fmt(p['coins'])} монет (сегодня добыто: {p['coins_today'] if p['coins_date'] else 0})\n"
@@ -584,10 +616,11 @@ async def show_admins(cb: CallbackQuery):
             continue
         p = await db.get_player(uid)
         if p:
-            name = p.get("first_name", f"ID {uid}")
-            lines.append(f"👑 <b>{name}</b> (@{p.get('username') or '—'}) — <code>{uid}</code>")
+            name = html.escape(p.get("first_name") or f"ID {uid}")
+            uname = html.escape(p.get("username") or "—")
+            lines.append(f"👑 <b>{name}</b> (@{uname}) — <code>{uid}</code>")
             rows.append([
-                Btn(text=f"👤 {name}", callback_data=f"adm:p:{uid}"),
+                Btn(text=f"👤 {name[:16]}", callback_data=f"adm:p:{uid}"),
                 Btn(text="❌ Снять права", callback_data=f"adm:remove_admin:{uid}")
             ])
 
@@ -944,7 +977,6 @@ async def state_remove_admin(message: Message, state: FSMContext):
 # ── Вывод Звёзд Telegram Stars (Fragment / TON) ───────────────
 
 async def show_stars_withdraw(cb: CallbackQuery):
-    await cb.answer()
     stats = await db.get_stars_stats()
     all_stars = stats.get("all_stars", 0)
     today_stars = stats.get("today_stars", 0)

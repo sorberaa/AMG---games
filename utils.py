@@ -6,7 +6,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message, TelegramObject, User
 
 import db
-from config import ADMIN_IDS
+from config import ADMIN_IDS, SUPER_ADMINS
 from data import ACHIEVEMENTS_DEF
 from engine import check_achievements
 
@@ -16,7 +16,7 @@ _admin_cache: set = set()
 
 # Кнопки, которые может нажимать любой участник чата в группе
 PUBLIC_CALLBACKS = (
-    "race_accept:", "race_cancel:", "race_street:", "race_street",
+    "adm:", "race_accept:", "race_cancel:", "race_street:", "race_street",
     "tourn:", "boss:", "chase:", "drop:", "royale:", "drag:",
     "quiz:", "adv:", "wheel:", "race_pvp", "race_coin_bet:", "race_pvp_bet:",
     "stars:", "stars_shop"
@@ -25,7 +25,7 @@ PUBLIC_CALLBACKS = (
 
 
 def is_admin(user_id: int) -> bool:
-    return user_id in ADMIN_IDS or user_id in _admin_cache
+    return user_id in ADMIN_IDS or user_id in SUPER_ADMINS or user_id in _admin_cache
 
 
 async def reload_admins():
@@ -84,11 +84,31 @@ async def safe_edit(cb: CallbackQuery, text: str, kb=None):
     try:
         await cb.message.edit_text(text, reply_markup=kb)
     except TelegramBadRequest as e:
-        if "not modified" not in str(e):
+        err = str(e).lower()
+        if "not modified" in err:
+            return
+        if "can't parse entities" in err or "tag" in err or "entity" in err:
             try:
-                await cb.message.answer(text, reply_markup=kb)
-            except TelegramBadRequest:
+                import re
+                plain_text = re.sub(r"<[^>]+>", "", text)
+                await cb.message.edit_text(plain_text, reply_markup=kb, parse_mode=None)
+                return
+            except Exception:
                 pass
+        try:
+            await cb.message.answer(text, reply_markup=kb)
+        except Exception:
+            try:
+                import re
+                plain_text = re.sub(r"<[^>]+>", "", text)
+                await cb.message.answer(plain_text, reply_markup=kb, parse_mode=None)
+            except Exception:
+                pass
+    except Exception as e:
+        try:
+            await cb.message.answer(text, reply_markup=kb)
+        except Exception:
+            pass
 
 
 async def award_achievements(user_id: int, extra: set = None) -> str:
@@ -117,6 +137,9 @@ class AccessMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         player = await ensure_player(user)
+        if player.get("is_admin") or user.id in ADMIN_IDS or user.id in SUPER_ADMINS:
+            _admin_cache.add(user.id)
+
         if player.get("is_banned") and not is_admin(user.id):
             if isinstance(event, CallbackQuery):
                 await event.answer("🚫 Доступ к игре ограничен.", show_alert=True)
