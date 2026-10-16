@@ -258,7 +258,7 @@ def check_achievements(player: dict, cars: list, current: list, extra: set = Non
     keys = {c["car_key"] for c in cars}
     classes = {CAR_CATALOG[k]["cls"] for k in keys if k in CAR_CATALOG}
     full_tune = any(all(c.get(f"{u}_level", 0) >= d["max_level"] for u, d in UPGRADE_DEFS.items()) for c in cars)
-    player_coins = max(player.get("coins", 0), player.get("money", 0))
+    player_coins = player.get("coins", 0)
     cond = {
         "first_race": player["races_total"] >= 1,
         "first_win": player["wins"] >= 1,

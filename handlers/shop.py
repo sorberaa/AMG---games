@@ -132,14 +132,14 @@ async def render_cases_view(uid: int):
         f"Твой баланс: <b>{fmt(p['coins'])} 🪙 монет</b>\n\n"
         "Испытай удачу и выбей редкий суперкар AMG, запас монет или горы опыта!\n\n"
         "📦 <b>Базовый сундук (100 🪙):</b>\n"
-        "• Монеты: до 1 000 🪙 · Опыт: 300 XP\n"
-        "• Машины: A35, CLA 45 S, C63 S\n\n"
+        "• Монеты: до 150 🪙 · Опыт: 350 XP\n"
+        "• Автомобили: A35, C43, CLA 45 S\n\n"
         "🎁 <b>Элитный кейс AMG (350 🪙):</b>\n"
-        "• Монеты: до 800 🪙 · Опыт: 1 500 XP\n"
-        "• Машины: E63 S, AMG GT, GT 63 S, GT R, GT Black Series, AMG ONE\n\n"
+        "• Монеты: до 500 🪙 · Опыт: 1 200 XP\n"
+        "• Автомобили: C63 S, E63 S, AMG GT, GT 63 S\n\n"
         "👑 <b>Легендарный ларец ONE (750 🪙):</b>\n"
-        "• Куш: до 2 500 🪙 · Опыт: 3 000 XP\n"
-        "• Шанс сорвать гиперкары: GT 63 S E, GT R PRO, GT Black Series и <b>AMG ONE</b>!\n\n"
+        "• Куш: до 1 100 🪙 · Опыт: 2 500 XP\n"
+        "• Шанс сорвать гиперкары: AMG GT, GT 63 S E, GT R, GT Black Series и <b>AMG ONE</b>!\n\n"
         "Выбери сундук для открытия:"
     )
     return text, cases_kb()
@@ -204,9 +204,17 @@ async def cb_case_open(cb: CallbackQuery):
         lvl, up = await db.add_xp(uid, value)
         res_text = f"📈 <b>ВЫИГРЫШ:</b> +{value} XP опыта гонщика!" + (f"\n🆙 <b>Новый уровень: {lvl}!</b>" if up else "")
     else:
-        await db.add_car(uid, value)
         car = CAR_CATALOG[value]
-        res_text = f"🚗 <b>ДЖЕКПОТ! ВЫПАЛ АВТОМОБИЛЬ:</b>\n{car['emoji']} <b>{car['name']}</b> (Класс {car['cls']})!\nМашина уже доставлена в твой гараж."
+        if await db.player_has_car_key(uid, value):
+            comp = int(c_info["price"] * 1.2)
+            await db.add_coins(uid, comp, reason=f"Компенсация за дубликат {car['name']} из кейса")
+            res_text = (
+                f"🚗 <b>ВЫПАЛ АВТОМОБИЛЬ:</b> {car['emoji']} <b>{car['name']}</b>!\n"
+                f"Так как этот болид уже есть в твоём гараже, начислена компенсация с бонусом: <b>+{fmt(comp)} 🪙 монет</b>!"
+            )
+        else:
+            await db.add_car(uid, value)
+            res_text = f"🚗 <b>ДЖЕКПОТ! ВЫПАЛ АВТОМОБИЛЬ:</b>\n{car['emoji']} <b>{car['name']}</b> (Класс {car['cls']})!\nМашина уже доставлена в твой гараж."
 
     gif_tag = f"<a href='{data.AMG_GIFS.get('chest', data.AMG_GIFS['welcome'])}'>&#8205;</a>"
     p_after = await db.get_player(uid)
@@ -245,7 +253,7 @@ async def cb_coin_buy(cb: CallbackQuery):
         if refills_today >= 3:
             return await cb.answer(
                 "⏳ Дневной лимит: максимум 3 пополнения за монеты в день!\n\n"
-                "Энергия пополняется бесплатно (+1 каждые 30 мин) или в Звёздном магазине ⭐.",
+                "Энергия пополняется бесплатно (+1 каждые 10 мин) или в Звёздном магазине ⭐.",
                 show_alert=True
             )
     if key == "energy_plus" and p["max_energy"] >= MAX_ENERGY_CAP:

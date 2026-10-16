@@ -246,23 +246,6 @@ async def cb_race_mode(cb: CallbackQuery):
     is_group = (cb.message.chat.type != "private")
     chat_id = cb.message.chat.id
 
-    if mode == "wheel" and is_group:
-        await cb.answer()
-        gif_tag = f"<a href='{data.AMG_GIFS['wheel']}'>&#8205;</a>"
-        from kb import wheel_kb
-        return await safe_edit(
-            cb,
-            f"{gif_tag}🎰 <b>КОЛЕСО ФОРТУНЫ MERCEDES-AMG</b> 🎰\n\n"
-            "Испытай удачу на сходке стритрейсеров!\n"
-            "Каждый гонщик может крутить рулетку <b>1 раз в сутки бесплатно</b>.\n\n"
-            "🎁 <b>Возможные призы:</b>\n"
-            "• До <b>150 🪙 золотых монет</b>\n"
-            "• Дополнительная ⚡ энергия и 📈 опыт\n"
-            "• <i>(Осторожно: есть шанс нарваться на штраф от ДПС!)</i>\n\n"
-            "Жми кнопку ниже, чтобы запустить вращение! 👇",
-            wheel_kb()
-        )
-
     if mode == "adv":
         return await cb.answer("🤝 Одиночные режимы убраны! Играйте командой в групповом чате: /boss, /chase, /tournament, /royale, /drag, /airdrop, /quiz, /wheel", show_alert=True)
 
@@ -270,22 +253,24 @@ async def cb_race_mode(cb: CallbackQuery):
         await cb.answer()
         from handlers.group_games import (
             start_tournament_recruitment, cmd_chase, cmd_boss, cmd_drag,
-            cmd_royale, cmd_airdrop, cmd_quiz
+            cmd_royale, cmd_airdrop, cmd_quiz, cmd_wheel
         )
-        if mode == "chase":
-            return await cmd_chase(cb.message)
+        if mode == "wheel":
+            return await cmd_wheel(cb.message, caller=cb.from_user)
+        elif mode == "chase":
+            return await cmd_chase(cb.message, caller=cb.from_user)
         elif mode == "tourn":
             return await start_tournament_recruitment(chat_id, cb.from_user.first_name, cb.message.answer)
         elif mode == "boss":
-            return await cmd_boss(cb.message)
+            return await cmd_boss(cb.message, caller=cb.from_user)
         elif mode == "drag":
-            return await cmd_drag(cb.message)
+            return await cmd_drag(cb.message, caller=cb.from_user)
         elif mode == "royale":
-            return await cmd_royale(cb.message)
+            return await cmd_royale(cb.message, caller=cb.from_user)
         elif mode == "airdrop":
-            return await cmd_airdrop(cb.message)
+            return await cmd_airdrop(cb.message, caller=cb.from_user)
         elif mode == "quiz":
-            return await cmd_quiz(cb.message)
+            return await cmd_quiz(cb.message, caller=cb.from_user)
 
     await cb.answer()
     from aiogram.types import InlineKeyboardButton as Btn, InlineKeyboardMarkup
@@ -303,8 +288,7 @@ async def cb_race_mode(cb: CallbackQuery):
             "• 💨 <b>Форсаж:</b> добавляет отрыв от погони\n"
             "• 🛡 <b>Прикрытие:</b> сбивает тревогу полиции\n"
             "• ↩️ <b>Вираж:</b> путает перехватчиков\n\n"
-            "⚡ <b>Без таймаутов:</b> можно уходить от погони нон-стоп!\n"
-            "💰 Награда каждому участнику: <b>монеты 🪙 и XP</b>!\n\n"
+            "💰 Награда каждому участнику при отрыве: <b>монеты 🪙 и XP</b>!\n\n"
             "<i>Запусти режим в командном чате кнопкой ниже или командой /chase!</i>"
         ),
         "tourn": (

@@ -186,8 +186,12 @@ async def cb_daily_claim(cb: CallbackQuery):
             await db.add_xp(uid, value)
             extra.append(f"📦 Кейс: +{value} XP")
         else:
-            await db.add_car(uid, value)
-            extra.append(f"📦 Кейс: {CAR_CATALOG[value]['name']}!")
+            if await db.player_has_car_key(uid, value):
+                await db.add_coins(uid, 120, reason="Компенсация за дубликат авто из бонуса дня")
+                extra.append(f"📦 Кейс: {CAR_CATALOG[value]['name']} (дубликат → +120 🪙)!")
+            else:
+                await db.add_car(uid, value)
+                extra.append(f"📦 Кейс: {CAR_CATALOG[value]['name']}!")
     await cb.answer("🎁 Награда получена!")
     ach = await award_achievements(uid)
     lines = [f"🪙 +{coins} монет", f"📈 +{r['xp']} XP"]

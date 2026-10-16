@@ -48,12 +48,10 @@ def pack_details_text(pack: dict, player: dict) -> str:
         lines.append(f"• 🔥 <b>Нитро-ускоритель (+15% к победе)</b> на {pack['nitro_hours']} часа")
     if pack.get("bonus_coins"):
         lines.append(f"• 🪙 <b>{pack['bonus_coins']} монет</b> на игровой баланс")
-    if pack.get("bonus_money"):
-        lines.append(f"• 💵 <b>${fmt(pack['bonus_money'])}</b> на тюнинг и запчасти")
     if pack.get("bonus_xp"):
         lines.append(f"• 📈 <b>+{pack['bonus_xp']} XP</b> к уровню")
     if pack.get("vip_days"):
-        lines.append(f"• 👑 <b>VIP-статус на {pack['vip_days']} дней</b> (корона в нике, +3 к баку энергии)")
+        lines.append(f"• 👑 <b>VIP-статус на {pack['vip_days']} дней</b> (корона в нике, +{pack.get('energy_bonus', 3)} к баку энергии)")
     if pack.get("give_car"):
         car = CAR_CATALOG.get(pack["give_car"])
         car_name = car["name"] if car else pack["give_car"]
@@ -186,12 +184,7 @@ async def successful_payment_handler(message: Message, player: dict):
         await db.add_coins(user_id, pack["bonus_coins"], reason=f"Telegram Stars: {pack['title']}")
         received_lines.append(f"• 🪙 Начислено монет: <b>+{pack['bonus_coins']}</b>")
 
-    # 4. Игровые доллары на тюнинг
-    if pack.get("bonus_money"):
-        await db.increment(user_id, money=pack["bonus_money"])
-        received_lines.append(f"• 💵 Средства на тюнинг: <b>+${fmt(pack['bonus_money'])}</b>")
-
-    # 4.1 Золотой винил
+    # 4. Золотой винил
     if pack.get("gold_wrap"):
         await db.update_player(user_id, gold_wrap=1)
         received_lines.append("• ✨ <b>Эксклюзивный золотой винил установлен!</b> (повышает авторитет и сияние)")
@@ -225,11 +218,15 @@ async def successful_payment_handler(message: Message, player: dict):
     if pack.get("case_drop"):
         roll = random.random()
         if roll < 0.25:
-            await db.add_car(user_id, "amg_gt")
-            received_lines.append("• 🎁 <b>СУПЕР-ПРИЗ ИЗ КЕЙСА:</b> В твой гараж выбит <b>Mercedes-AMG GT</b> (класс S)!")
+            if await db.player_has_car_key(user_id, "amg_gt"):
+                await db.add_coins(user_id, 300, reason="Компенсация за дубликат AMG GT из Звёздного кейса")
+                received_lines.append("• 🎁 <b>СУПЕР-ПРИЗ ИЗ КЕЙСА:</b> Выпал <b>Mercedes-AMG GT</b> (уже в гараже) — начислено <b>+300 🪙 монет</b>!")
+            else:
+                await db.add_car(user_id, "amg_gt")
+                received_lines.append("• 🎁 <b>СУПЕР-ПРИЗ ИЗ КЕЙСА:</b> В твой гараж выбит <b>Mercedes-AMG GT</b> (класс S)!")
         elif roll < 0.60:
-            await db.add_coins(user_id, 35, reason="Дроп из Звёздного кейса")
-            received_lines.append("• 🎁 <b>Приз из кейса:</b> Дополнительно +35 монет 🪙!")
+            await db.add_coins(user_id, 75, reason="Дроп из Звёздного кейса")
+            received_lines.append("• 🎁 <b>Приз из кейса:</b> Дополнительно +75 монет 🪙!")
         else:
             await db.add_xp(user_id, 1000)
             received_lines.append("• 🎁 <b>Приз из кейса:</b> Дополнительно +1 000 XP 📈!")

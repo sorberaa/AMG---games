@@ -49,9 +49,10 @@ def is_salt_boosted(player: dict | None) -> bool:
 
 
 async def ensure_player(user: User) -> dict:
+    raw_name = (user.first_name or "Гонщик").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").strip() or "Гонщик"
     p = await db.get_player(user.id)
     if p is None:
-        p = await db.create_player(user.id, user.username, user.first_name or "Гонщик")
+        p = await db.create_player(user.id, user.username, raw_name)
         car_id = await db.add_car(user.id, "c180")
         await db.select_car(user.id, car_id)
         p = await db.get_player(user.id)
@@ -65,8 +66,10 @@ async def ensure_player(user: User) -> dict:
             await db.select_car(user.id, cars[-1]["id"])
             p = await db.get_player(user.id)
 
-        if p["username"] != user.username or p["first_name"] != (user.first_name or "Гонщик"):
-            await db.update_player(user.id, username=user.username, first_name=user.first_name or "Гонщик")
+        if p["username"] != user.username or p["first_name"] != raw_name:
+            await db.update_player(user.id, username=user.username, first_name=raw_name)
+            p["username"] = user.username
+            p["first_name"] = raw_name
     return p
 
 
